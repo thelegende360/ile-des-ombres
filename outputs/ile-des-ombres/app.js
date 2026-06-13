@@ -162,6 +162,7 @@ let speechQueue = [];
 let speechBusy = false;
 let setupOpenRole = "Assassin";
 const heardNarrationIds = new Set();
+const recentNarrations = new Map();
 
 const app = document.querySelector("#app");
 const SETUP_STORAGE_KEY = "ile-des-ombres-setup";
@@ -1191,12 +1192,40 @@ function flushPendingPublicAnnouncements() {
 
 function queueNarration(text) {
   const spoken = spokenFrench(text);
+  if (isDuplicateNarration(spoken)) return;
+  markNarrationHeard(spoken);
   recordSharedNarration(spoken);
   const synth = globalThis.speechSynthesis;
   const Utterance = globalThis.SpeechSynthesisUtterance;
   if (!synth || !Utterance) return;
   speechQueue.push(spoken);
   playNextNarration();
+}
+
+function narrationKey(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[.,;:!?]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isDuplicateNarration(text, windowMs = 4500) {
+  const key = narrationKey(text);
+  if (!key) return true;
+  const now = Date.now();
+  const last = recentNarrations.get(key) || 0;
+  return now - last < windowMs || speechQueue.some(entry => narrationKey(entry) === key);
+}
+
+function markNarrationHeard(text) {
+  const key = narrationKey(text);
+  if (!key) return;
+  const now = Date.now();
+  recentNarrations.set(key, now);
+  for (const [entryKey, timestamp] of recentNarrations) {
+    if (now - timestamp > 30000) recentNarrations.delete(entryKey);
+  }
 }
 
 function recordSharedNarration(spokenText) {
@@ -1213,6 +1242,8 @@ function playSharedNarrations() {
   (game?.narrations || []).forEach(entry => {
     if (!entry?.id || heardNarrationIds.has(entry.id)) return;
     heardNarrationIds.add(entry.id);
+    if (isDuplicateNarration(entry.text)) return;
+    markNarrationHeard(entry.text);
     speechQueue.push(entry.text);
   });
   playNextNarration();
