@@ -2,10 +2,11 @@
   "name": "Ile des Ombres",
   "short_name": "Ile Ombres",
   "description": "Jeu de survie, vote et bluff jouable en ligne.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "landscape",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "background_color": "#101820",
   "theme_color": "#101820",
   "icons": [
