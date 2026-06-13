@@ -1,0 +1,14 @@
+{
+  "name": "ile-des-ombres",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Jeu en ligne Ile des Ombres",
+  "main": "outputs/ile-des-ombres/online-server.js",
+  "scripts": {
+    "start": "node outputs/ile-des-ombres/online-server.js",
+    "dev": "node outputs/ile-des-ombres/online-server.js 4180"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
