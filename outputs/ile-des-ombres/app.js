@@ -506,7 +506,8 @@ function consumeBotItem(player, type) {
 
 function useBotActionItems() {
   living().filter(player => player.isBot).forEach(player => {
-    if (availableItems(player, "crystal").length && Math.random() < 0.22) {
+    useBotRolePowers(player);
+    if (shouldBotUseCrystal(player)) {
       const target = botTargetForItem(player);
       if (target && consumeBotItem(player, "crystal")) {
         rememberCrystalSpy(player, target);
@@ -539,6 +540,190 @@ function useBotMedkit(player) {
   return true;
 }
 
+function useBotRolePowers(player) {
+  if (!player?.isBot || !player.alive || game.phase !== "actions") return;
+  if (player.role === "Assassin") {
+    useBotAssassinPowers(player);
+  } else if (player.role === "Chaman") {
+    useBotChamanPowers(player);
+  } else if (player.role === "Survivant") {
+    useBotSurvivantPower(player);
+  } else if (player.role === "Enfant") {
+    useBotChildPower(player);
+  } else if (player.role === "Chien") {
+    useBotDogPowers(player);
+  }
+}
+
+function botSurvivalPressure(player) {
+  return player.fatigue * 4 + player.hunger + player.thirst + (likelyShortageSoon() ? 2 : 0);
+}
+
+function botResourceStress() {
+  const needs = rationNeeds();
+  return Math.max(
+    needs.food ? 1 - game.camp.food / needs.food : 0,
+    needs.water ? 1 - game.camp.water / needs.water : 0
+  );
+}
+
+function shouldBotUseCrystal(player) {
+  if (!availableItems(player, "crystal").length) return false;
+  const unknownTargets = living().filter(target => target.id !== player.id && !player.crystalMemory?.[target.id]);
+  if (!unknownTargets.length) return false;
+  if (unknownTargets.some(target => target.cursed)) return Math.random() < 0.8;
+  const pressure = botSurvivalPressure(player);
+  const rate = pressure >= 5 ? 0.65 : game.day >= 4 ? 0.48 : 0.32;
+  return Math.random() < rate;
+}
+
+function useBotAssassinPowers(assassin) {
+  if (!assassin.assassinKillUsed && !assassin.pendingAssassinKill) {
+    const killTarget = botAssassinKillTarget(assassin);
+    if (killTarget && Math.random() < 0.82) {
+      assassin.assassinKillUsed = true;
+      assassin.pendingAssassinKill = killTarget.id;
+      assassin.privateNote = `Elimination preparee contre ${killTarget.name}.`;
+      addPendingPublicAnnouncement("Une élimination d'assassin est préparée.");
+    }
+  }
+
+  if (!assassin.assassinStealUsed && !assassin.pendingAssassinSteal) {
+    const stealTarget = botStealTarget(assassin);
+    const wantsSteal = stealTarget && (game.day >= 2 || botSurvivalPressure(assassin) >= 4 || stealTarget.items.length >= 2);
+    if (wantsSteal && Math.random() < 0.72) {
+      assassin.assassinStealUsed = true;
+      assassin.pendingAssassinSteal = stealTarget.id;
+      game.pendingAssassinSteals.push({ assassinId: assassin.id, targetId: stealTarget.id });
+      assassin.privateNote = `Vol prepare contre ${stealTarget.name}.`;
+    }
+  }
+}
+
+function botAssassinKillTarget(assassin) {
+  const targets = living().filter(target => target.id !== assassin.id && target.fatigue === 1 && !target.leftBehind);
+  if (!targets.length) return null;
+  return targets.sort((a, b) => botTargetValue(b) - botTargetValue(a))[0];
+}
+
+function botStealTarget(assassin) {
+  const targets = living().filter(target => target.id !== assassin.id && !target.leftBehind && availableItems(target).length);
+  if (!targets.length) return null;
+  return targets.sort((a, b) => availableItems(b).length - availableItems(a).length || botTargetValue(b) - botTargetValue(a))[0];
+}
+
+function botTargetValue(target) {
+  const roleValue = { Assassin: 4, Chaman: 3, Survivant: 2.3, Robinson: 2, Chien: 2, Enfant: 1.4 };
+  return (roleValue[target.role] || 1) + availableItems(target).length * 0.6 + target.fatigue * 0.4;
+}
+
+function useBotChamanPowers(chaman) {
+  if (!chaman.chamanReviveUsed && !chaman.pendingChamanRevive) {
+    const target = game.players
+      .filter(candidate => !candidate.alive && !candidate.leftBehind)
+      .sort((a, b) => botTargetValue(b) - botTargetValue(a))[0];
+    if (target && Math.random() < 0.88) {
+      chaman.chamanReviveUsed = true;
+      chaman.pendingChamanRevive = target.id;
+      chaman.privateNote = `Reanimation preparee pour ${target.name}.`;
+    }
+  }
+
+  chaman.chamanAmuletTargets ||= [];
+  chaman.chamanAmuletUses ||= 0;
+  if (chaman.chamanAmuletUses < 1) {
+    const target = botProtectTarget(chaman);
+    if (target && Math.random() < 0.78) {
+      chaman.chamanAmuletUses += 1;
+      chaman.chamanAmuletTargets.push(target.id);
+      target.items.push(createItem("amulet", game.day));
+      target.privateNote = `${chaman.name} t'a donne une amulette de protection.`;
+      addPendingPublicAnnouncement("Une amulette de protection est creee par un chaman.", "Une amulette de protection est offerte par un chaman.");
+    }
+  }
+}
+
+function botProtectTarget(chaman) {
+  chaman.chamanAmuletTargets ||= [];
+  const candidates = living().filter(target => !chaman.chamanAmuletTargets.includes(target.id));
+  if (!candidates.length) return null;
+  const stressed = candidates
+    .filter(target => botSurvivalPressure(target) >= 4 || target.id === chaman.id || likelyShortageSoon())
+    .sort((a, b) => botSurvivalPressure(b) - botSurvivalPressure(a));
+  return stressed[0] || null;
+}
+
+function useBotSurvivantPower(player) {
+  if (player.survivorSupplyUsed || player.pendingSurvivorSupply) return;
+  const stress = botResourceStress();
+  const shouldPrepare = likelyShortageSoon() || stress > 0.35 || game.day >= 7;
+  if (shouldPrepare && Math.random() < 0.86) {
+    player.survivorSupplyUsed = true;
+    player.pendingSurvivorSupply = true;
+    player.privateNote = "Soutien de reserves prepare.";
+    addPendingPublicAnnouncement("Un survivant prepare un soutien de reserves.");
+  }
+}
+
+function useBotChildPower(child) {
+  child.childCopyUses ||= 0;
+  if (child.childCopyUses >= 3 || !availableItems(child).length) return;
+  const mentor = mentorFor(child);
+  if (!mentor || !mentor.alive || mentor.leftBehind) return;
+  const mentorItem = bestCopyItem(availableItems(mentor));
+  if (!mentorItem) return;
+  const discard = lowestValueItem(availableItems(child));
+  if (!discard || itemUtility(mentorItem.type) <= itemUtility(discard.type)) return;
+  if (Math.random() < 0.72) {
+    child.items = child.items.filter(item => item.id !== discard.id);
+    child.items.push(createItem(mentorItem.type, game.day));
+    child.childCopyUses += 1;
+    child.privateNote = `Tu copies ${ITEMS[mentorItem.type]} de ton mentor.`;
+    addPendingPublicAnnouncement("Un enfant copie un objet de son mentor.");
+  }
+}
+
+function bestCopyItem(items) {
+  return [...items].sort((a, b) => itemUtility(b.type) - itemUtility(a.type))[0] || null;
+}
+
+function lowestValueItem(items) {
+  return [...items].sort((a, b) => itemUtility(a.type) - itemUtility(b.type))[0] || null;
+}
+
+function itemUtility(type) {
+  return { medkit: 6, amulet: 5, vest: 4.5, doubleVote: 4, pistol: 3.5, crystal: 2.5 }[type] || 1;
+}
+
+function useBotDogPowers(dog) {
+  const joy = dog.joy || 0;
+  if (joy >= 3 && (dog.fatigue > 0 || dog.hunger + dog.thirst >= 2)) {
+    dog.joy -= 3;
+    dog.hunger = 0;
+    dog.thirst = 0;
+    dog.fatigue = 0;
+    dog.wounded = false;
+    dog.privateNote = `Pouvoir du chien: retabli. Joie restante: ${dog.joy}.`;
+    return;
+  }
+  if (joy >= 2 && !dog.voteShield && likelyShortageSoon() && botSurvivalPressure(dog) >= 3) {
+    dog.joy -= 2;
+    dog.voteShield = true;
+    dog.privateNote = `Pouvoir du chien: amulette active. Joie restante: ${dog.joy}.`;
+    return;
+  }
+  const target = living().filter(candidate => candidate.id !== dog.id && availableItems(candidate).length)
+    .sort((a, b) => availableItems(b).length - availableItems(a).length || botTargetValue(b) - botTargetValue(a))[0];
+  if (joy >= 1 && target && game.day >= 4 && Math.random() < 0.38) {
+    const item = lowestValueItem(availableItems(target)) || randomEntry(availableItems(target));
+    target.items = target.items.filter(candidate => candidate.id !== item.id);
+    dog.joy -= 1;
+    dog.privateNote = `Pouvoir du chien: ${ITEMS[item.type]} detruit chez ${target.name}.`;
+    target.privateNote = `${ITEMS[item.type]} a ete detruit.`;
+    addPendingPublicAnnouncement("Un objet est detruit.");
+  }
+}
+
 function likelyShortageSoon() {
   const needs = living().reduce((total, player) => ({
     food: total.food + clamp(player.hunger + 1, 0, needCap(player)),
@@ -560,8 +745,9 @@ function botTargetForItem(player) {
 
 function shouldBotUsePistol(player) {
   if (!availableItems(player, "pistol").length || living().length <= 2) return false;
-  const isThreatened = player.fatigue > 0 || player.hunger + player.thirst >= 3;
-  return isThreatened && likelyShortageSoon() && Math.random() < 0.35;
+  const isThreatened = player.fatigue > 0 || player.hunger + player.thirst >= 3 || botSurvivalPressure(player) >= 5;
+  const assassinBonus = player.role === "Assassin" ? 0.2 : 0;
+  return isThreatened && likelyShortageSoon() && Math.random() < 0.55 + assassinBonus;
 }
 
 function assignBotVotes() {
@@ -1435,13 +1621,46 @@ function finishEscapeIfReady() {
 
 function useBotVoteItemsForShortage() {
   living().filter(player => player.isBot).forEach(player => {
-    if (!player.voteShield && consumeBotItemBeforeCurrentDay(player, "amulet")) {
+    if (shouldBotUseVoteShield(player) && !player.voteShield && consumeBotItemBeforeCurrentDay(player, "amulet")) {
       player.voteShield = true;
     }
-    if (!player.doubleVote && consumeBotItemBeforeCurrentDay(player, "doubleVote")) {
+    if (shouldBotUseDoubleVote(player) && !player.doubleVote && consumeBotItemBeforeCurrentDay(player, "doubleVote")) {
       player.doubleVote = true;
     }
+    if (shouldBotUseVoteShield(player) && player.role === "Chien" && !player.voteShield && (player.joy || 0) >= 2) {
+      player.joy -= 2;
+      player.voteShield = true;
+      player.privateNote = `Pouvoir du chien: amulette active. Joie restante: ${player.joy}.`;
+    }
   });
+}
+
+function shouldBotUseVoteShield(player) {
+  if (player.voteShield) return false;
+  const targets = voteTargetsFor(player);
+  const canBeTargeted = living().some(voter => voter.id !== player.id && voteTargetsFor(voter).some(target => target.id === player.id));
+  if (!canBeTargeted) return false;
+  const missing = (game.shortage?.foodMissing || 0) + (game.shortage?.waterMissing || 0);
+  const pressure = botSurvivalPressure(player);
+  if (player.fatigue >= 1) return true;
+  if (pressure >= 5) return Math.random() < 0.9;
+  if (missing >= Math.max(2, Math.ceil(living().length / 3))) return Math.random() < 0.65;
+  return targets.length <= 2 && Math.random() < 0.5;
+}
+
+function shouldBotUseDoubleVote(player) {
+  if (player.doubleVote) return false;
+  if (!voteTargetsFor(player).length) return false;
+  const missing = (game.shortage?.foodMissing || 0) + (game.shortage?.waterMissing || 0);
+  const pressure = botSurvivalPressure(player);
+  const hasHighValueTarget = voteTargetsFor(player).some(target => {
+    const role = knownRoleFor(player, target);
+    return role === "Assassin" || role === "Chaman" || target.fatigue === 0;
+  });
+  if (pressure >= 5) return Math.random() < 0.88;
+  if (missing >= 2 && hasHighValueTarget) return Math.random() < 0.75;
+  if (missing >= Math.ceil(living().length / 3)) return Math.random() < 0.55;
+  return false;
 }
 
 function consumeBotItemBeforeCurrentDay(player, type) {
