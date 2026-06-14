@@ -19,25 +19,25 @@ const ITEMS = {
 };
 const ITEM_EFFECTS = {
   pistol: "Tue un joueur apres que tous les joueurs ont choisi leur action. Usage unique.",
-  amulet: "Protège d'un vote de pénurie complet. Usage unique.",
+  amulet: "ProtÃ¨ge d'un vote de pÃ©nurie complet. Usage unique.",
   crystal: "Regarde le role secret, la derniere action et le dernier vote d'un joueur. Usage unique.",
-  doubleVote: "Ton vote compte double pendant un vote de pénurie complet. Usage unique.",
+  doubleVote: "Ton vote compte double pendant un vote de pÃ©nurie complet. Usage unique.",
   medkit: "Retire 1 fatigue. Usage unique.",
   vest: "Encaisse automatiquement un tir de pistolet. Usage unique."
 };
 const ROLES = ["Assassin", "Robinson", "Chaman", "Survivant", "Enfant", "Chien"];
 const ROLE_EFFECTS = {
-  Assassin: "Vole 1 objet une fois. Peut éliminer un joueur à 1 fatigue une fois. Pistolet +20%, Double vote +10%, Boule de cristal -20%, Kit de soin -10%.",
+  Assassin: "Vole 1 objet une fois. Peut Ã©liminer un joueur Ã  1 fatigue une fois. Pistolet +20%, Double vote +10%, Boule de cristal -20%, Kit de soin -10%.",
   Robinson: "Commence avec 1 objet de plus. Peut dormir +1 fois et explorer +1 fois. Kit de soin +10%, Boule de cristal -10%.",
   Chaman: "Boule de cristal +10%, Amulette +10%, Double vote -20%.",
   Survivant: "+1 ressource sur bois/eau/nourriture. Faim et soif max 2. Gilet +10%, Kit de soin +10%, Boule de cristal -10%, Double vote -10%.",
-  Enfant: "Pistolet -10%, Double vote -10%. Ne peut pas explorer. Mentor vivant: faim, soif et fatigue max 1, mais le pistolet et le vote du radeau peuvent le faire perdre. Mentor mort: gagne ses objets, plus de limite faim/soif, fatigue min 1.",
+  Enfant: "Ne peut pas explorer. Pouvoir actif illimite: jeter un objet pour copier un objet de son mentor. En debut de partie, un mentor lui est attribue. Son mentor voit sur sa carte qui est l'enfant. Quand le mentor meurt, l'enfant ne peut plus copier les objets de son mentor.",
   Chien: "Explore sans limite, ne trouve aucun objet et gagne 1 joie. Peut depenser sa joie pour se retablir, detruire un objet ou activer une amulette. Peche maximum 2 fois et rapporte 3 nourriture."
 };
 const ROLE_SUMMARY = {
   Assassin: {
     objects: "Pistolet +20%, Double vote +10%, Boule de cristal -20%, Kit de soin -10%.",
-    powers: "Vole 1 objet à un joueur une fois. Peut préparer l'élimination d'un joueur à 1 fatigue; si la cible n'est plus fatiguée à la résolution, le pouvoir revient."
+    powers: "Vole 1 objet Ã  un joueur une fois. Peut prÃ©parer l'Ã©limination d'un joueur Ã  1 fatigue; si la cible n'est plus fatiguÃ©e Ã  la rÃ©solution, le pouvoir revient."
   },
   Robinson: {
     objects: "Kit de soin +10%, Boule de cristal -10%.",
@@ -49,11 +49,11 @@ const ROLE_SUMMARY = {
   },
   Survivant: {
     objects: "Gilet +10%, Kit de soin +10%, Boule de cristal -10%, Double vote -10%.",
-    powers: "+1 ressource quand il coupe du bois, pêche ou cherche de l'eau. Sa faim et sa soif ne peuvent pas dépasser 2. Une fois, peut ajouter 3 nourriture et 3 eau si une pénurie arrive en fin de tour."
+    powers: "+1 ressource quand il coupe du bois, pÃªche ou cherche de l'eau. Sa faim et sa soif ne peuvent pas dÃ©passer 2. Une fois, peut ajouter 3 nourriture et 3 eau si une pÃ©nurie arrive en fin de tour."
   },
   Enfant: {
-    objects: "Pistolet -10%, Double vote -10%.",
-    powers: "Pouvoir actif 3 fois: jeter un objet pour copier un objet du mentor. Mentor vivant: fatigue, faim et soif plafonnees a 1, mais le pistolet et le vote du radeau peuvent le faire perdre. Mentor mort: +1 fatigue, fatigue min 1, faim et soif plus plafonnees."
+    objects: "Aucun modificateur.",
+    powers: "Ne peut pas explorer. Pouvoir actif illimite: jeter un objet pour copier un objet de son mentor. En debut de partie, un mentor lui est attribue. Son mentor voit sur sa carte qui est l'enfant. Quand le mentor meurt, l'enfant ne peut plus copier les objets de son mentor."
   },
   Chien: {
     objects: "Aucun objet au depart. Aucun objet trouve en exploration.",
@@ -94,7 +94,7 @@ const EVENTS = [
     }
   },
   {
-    title: "Baies amères",
+    title: "Baies amÃ¨res",
     text: "Un repas douteux fait chuter le moral du camp.",
     apply: game => changeResource(game, "morale", -5)
   },
@@ -160,9 +160,12 @@ const DAY_5_EVENTS = [
 let game = null;
 let speechQueue = [];
 let speechBusy = false;
+let speechCurrentStartedAt = 0;
 let setupOpenRole = "Assassin";
 const heardNarrationIds = new Set();
 const recentNarrations = new Map();
+const MAX_SPEECH_QUEUE = 3;
+const MAX_SPEECH_DELAY_MS = 9000;
 
 const app = document.querySelector("#app");
 const SETUP_STORAGE_KEY = "ile-des-ombres-setup";
@@ -277,6 +280,7 @@ function buildRafts(state = game) {
 function addFatigue(player, amount) {
   player.fatigue = clamp(player.fatigue + amount, 0, 2);
   enforceChildMentorLimits(player);
+  player.wounded = player.alive && player.fatigue === 1;
 }
 
 function mentorFor(child) {
@@ -290,13 +294,6 @@ function hasLivingMentor(child) {
 
 function enforceChildMentorLimits(player) {
   if (player?.role !== "Enfant") return;
-  if (hasLivingMentor(player)) {
-    player.hunger = clamp(player.hunger, 0, 1);
-    player.thirst = clamp(player.thirst, 0, 1);
-    player.fatigue = clamp(player.fatigue, 0, 1);
-  } else if (player.mentorLost) {
-    player.fatigue = clamp(player.fatigue, 1, 2);
-  }
   player.wounded = player.fatigue === 1;
 }
 
@@ -308,15 +305,7 @@ function protectLivingChildren(summary = null) {
 }
 
 function protectChildFromDeath(child, summary = null) {
-  if (child.deathByPistol || child.leftBehind) return false;
-  if (!hasLivingMentor(child) || (child.alive && child.fatigue < 2)) return false;
-  child.alive = true;
-  child.leftBehind = false;
-  child.fatigue = 1;
-  child.wounded = true;
-  child.privateNote = `Ton mentor ${child.mentorName} vit encore: tu echappes a la mort.`;
-  pushImportantSummary(summary, `${child.name} ne meurt pas tant que son mentor est vivant.`);
-  return true;
+  return false;
 }
 
 function applyMentorLoss(summary = null) {
@@ -324,19 +313,8 @@ function applyMentorLoss(summary = null) {
     const mentor = mentorFor(child);
     if (mentor && (mentor.alive || mentor.leftBehind)) return;
     child.mentorLost = true;
-    const inheritedItems = mentor?.items || [];
-    if (inheritedItems.length) {
-      child.items.push(...inheritedItems);
-      mentor.items = [];
-    }
-    addFatigue(child, 1);
-    child.privateNote = `Ton mentor ${child.mentorName} est mort: tu recuperes ses objets, +1 fatigue. Tu ne peux plus utiliser de kit de soin.`;
-    summary?.push(`${child.name} perd son mentor, recupere ses objets et prend +1 fatigue.`);
-    if (child.fatigue >= 2) {
-      child.alive = false;
-      child.wounded = false;
-      pushDeathSummary(summary, child, `${child.name} est mort après avoir atteint 2 fatigue.`, `${child.name} est mort après avoir atteint deux points de fatigue.`);
-    }
+    child.privateNote = `Ton mentor ${child.mentorName} est mort: tu ne peux plus copier ses objets.`;
+    summary?.push(`${child.name} perd son mentor et ne peut plus copier ses objets.`);
   });
 }
 
@@ -361,9 +339,6 @@ function itemRatesForRole(role) {
   if (role === "Survivant") {
     return { pistol: 10, amulet: 20, crystal: 10, doubleVote: 10, medkit: 30, vest: 20 };
   }
-  if (role === "Enfant") {
-    return { pistol: 0, amulet: 20, crystal: 20, doubleVote: 10, medkit: 20, vest: 10 };
-  }
   if (role === "Chien") {
     return { pistol: 0, amulet: 0, crystal: 0, doubleVote: 0, medkit: 0, vest: 0 };
   }
@@ -377,7 +352,7 @@ function randomExploreItem(role = "Survivant") {
     roll -= rate;
     if (roll < 0) return type;
   }
-  return role === "Enfant" ? null : "medkit";
+  return "medkit";
 }
 
 function randomGuaranteedItem(role = "Survivant") {
@@ -512,14 +487,14 @@ function useBotActionItems() {
       const target = botTargetForItem(player);
       if (target && consumeBotItem(player, "crystal")) {
         rememberCrystalSpy(player, target);
-        addPendingPublicAnnouncement("Une boule de cristal est utilisée.");
+        trackItemActivation("crystal");
       }
     }
     if (shouldBotUsePistol(player)) {
       const target = botTargetForItem(player);
       if (target && consumeBotItem(player, "pistol")) {
         game.pendingPistols.push({ shooterId: player.id, targetId: target.id });
-        addPendingPublicAnnouncement("Un pistolet est préparé.");
+        trackItemActivation("pistol");
       }
     }
   });
@@ -533,11 +508,11 @@ function useBotMedkitsAtActionLock() {
 
 function useBotMedkit(player) {
   if (!player.isBot || !player.alive || player.fatigue <= 0) return false;
-  if (player.role === "Enfant" && player.mentorLost) return false;
   const item = consumeBotItem(player, "medkit");
   if (!item) return false;
-  addFatigue(player, -1);
-  addPendingPublicAnnouncement("Un kit de soin est utilisé.");
+  game.pendingBotMedkits = game.pendingBotMedkits || [];
+  game.pendingBotMedkits.push({ playerId: player.id });
+  addPendingPublicAnnouncement("Un kit de soin est utilisÃ©.");
   return true;
 }
 
@@ -585,7 +560,7 @@ function useBotAssassinPowers(assassin) {
       assassin.assassinKillUsed = true;
       assassin.pendingAssassinKill = killTarget.id;
       assassin.privateNote = `Elimination preparee contre ${killTarget.name}.`;
-      addPendingPublicAnnouncement("Une élimination d'assassin est préparée.");
+      addPendingPublicAnnouncement("Une Ã©limination d'assassin est prÃ©parÃ©e.");
     }
   }
 
@@ -668,7 +643,7 @@ function useBotSurvivantPower(player) {
 
 function useBotChildPower(child) {
   child.childCopyUses ||= 0;
-  if (child.childCopyUses >= 3 || !availableItems(child).length) return;
+  if (!availableItems(child).length) return;
   const mentor = mentorFor(child);
   if (!mentor || !mentor.alive || mentor.leftBehind) return;
   const mentorItem = bestCopyItem(availableItems(mentor));
@@ -935,6 +910,8 @@ function newGame(config = {}) {
     votes: {},
     pendingPistols: [],
     pendingAssassinSteals: [],
+    pendingBotMedkits: [],
+    itemActivationsThisTurn: {},
     pendingPublicAnnouncements: [],
     pendingVoteAnnouncements: []
   };
@@ -967,6 +944,15 @@ function assignChildMentors() {
 function addLog(text, type = "") {
   game.log.unshift({ text, type });
   game.log = game.log.slice(0, 14);
+}
+
+function addNarrationLog(text) {
+  if (!game?.log) return;
+  const spoken = spokenFrench(text);
+  if (!spoken) return;
+  const alreadyVisible = game.log.slice(0, 4).some(entry => entry.text === spoken);
+  if (alreadyVisible) return;
+  addLog(spoken, "important");
 }
 
 function onlineApi(path, options = {}) {
@@ -1012,7 +998,7 @@ function applyOnlineGame(state, version = online.version) {
   game.bottomDrawer = game.bottomDrawer || null;
   online.version = version;
   playSharedNarrations();
-  online.status = `Synchronisé (${online.roomCode})`;
+  online.status = `SynchronisÃ© (${online.roomCode})`;
   render();
   online.applyingRemote = false;
 }
@@ -1073,7 +1059,7 @@ async function publishOnlineState() {
       })
     });
     online.version = data.version || online.version;
-    online.status = `Synchronisé (${online.roomCode})`;
+    online.status = `SynchronisÃ© (${online.roomCode})`;
   } catch (error) {
     online.status = error.message || "Synchronisation impossible";
   }
@@ -1092,7 +1078,7 @@ async function fetchOnlineState() {
       applyOnlineGame(data.state, data.version);
     } else {
       online.version = Math.max(online.version, data.version || 0);
-      online.status = `Synchronisé (${online.roomCode})`;
+      online.status = `SynchronisÃ© (${online.roomCode})`;
     }
   } catch (error) {
     online.status = error.message || "Salon indisponible";
@@ -1106,12 +1092,12 @@ async function createOnlineRoom() {
     online.roomCode = data.code;
     online.connected = true;
     online.version = 0;
-    online.status = `Salon créé: ${data.code}`;
+    online.status = `Salon crÃ©Ã©: ${data.code}`;
     await publishOnlineState();
     startOnlinePolling();
     render();
   } catch (error) {
-    online.status = "Lance le serveur en ligne pour créer un salon.";
+    online.status = "Lance le serveur en ligne pour crÃ©er un salon.";
     render();
   }
 }
@@ -1164,11 +1150,11 @@ function deathTextWithRole(player, text) {
 }
 
 function announceDeath(player, text, narration = text) {
-  announceImportant(deathTextWithRole(player, text), `${narration} Son rôle était ${player.role}.`);
+  announceImportant(deathTextWithRole(player, text), `${narration} Son rÃ´le Ã©tait ${player.role}.`);
 }
 
 function pushDeathSummary(summary, player, text, narration = text) {
-  pushImportantSummary(summary, deathTextWithRole(player, text), `${narration} Son rôle était ${player.role}.`);
+  pushImportantSummary(summary, deathTextWithRole(player, text), `${narration} Son rÃ´le Ã©tait ${player.role}.`);
 }
 
 function addPendingPublicAnnouncement(text, narration = text) {
@@ -1176,30 +1162,78 @@ function addPendingPublicAnnouncement(text, narration = text) {
   game.pendingPublicAnnouncements.push({ text, narration });
 }
 
+function trackItemActivation(type, amount = 1) {
+  if (!game) return;
+  game.itemActivationsThisTurn = game.itemActivationsThisTurn || {};
+  game.itemActivationsThisTurn[type] = (game.itemActivationsThisTurn[type] || 0) + amount;
+}
+
+function pendingItemActivationAnnouncements() {
+  const counts = game?.itemActivationsThisTurn || {};
+  const announcements = [];
+  if (counts.pistol) {
+    announcements.push({
+      text: `${counts.pistol} pistolet${counts.pistol > 1 ? "s" : ""} ${counts.pistol > 1 ? "sont prÃ©parÃ©s" : "est prÃ©parÃ©"} ce tour-ci.`,
+      narration: `${counts.pistol} pistolet${counts.pistol > 1 ? "s" : ""} ${counts.pistol > 1 ? "sont prÃ©parÃ©s" : "est prÃ©parÃ©"} ce tour-ci.`
+    });
+  }
+  if (counts.crystal) {
+    announcements.push({
+      text: `${counts.crystal} boule${counts.crystal > 1 ? "s" : ""} de cristal ${counts.crystal > 1 ? "sont utilisÃ©es" : "est utilisÃ©e"} ce tour-ci.`,
+      narration: `${counts.crystal} boule${counts.crystal > 1 ? "s" : ""} de cristal ${counts.crystal > 1 ? "sont utilisÃ©es" : "est utilisÃ©e"} ce tour-ci.`
+    });
+  }
+  return announcements;
+}
+
 function flushPendingVoteAnnouncements() {
   game.pendingVoteAnnouncements = [];
 }
 
 function flushPendingPublicAnnouncements() {
-  const announcements = game.pendingPublicAnnouncements || [];
+  const announcements = [
+    ...pendingItemActivationAnnouncements(),
+    ...(game.pendingPublicAnnouncements || [])
+  ];
   if (!announcements.length) return;
   announcements.forEach(announcement => {
     addLog(announcement.text, "important");
     if (announcement.narration) queueNarration(announcement.narration);
   });
   game.pendingPublicAnnouncements = [];
+  game.itemActivationsThisTurn = {};
 }
 
 function queueNarration(text) {
   const spoken = spokenFrench(text);
   if (isDuplicateNarration(spoken)) return;
+  addNarrationLog(spoken);
   markNarrationHeard(spoken);
   recordSharedNarration(spoken);
   const synth = globalThis.speechSynthesis;
   const Utterance = globalThis.SpeechSynthesisUtterance;
   if (!synth || !Utterance) return;
-  speechQueue.push(spoken);
+  enqueueSpeech(spoken);
   playNextNarration();
+}
+
+function enqueueSpeech(text) {
+  const now = Date.now();
+  speechQueue = speechQueue
+    .filter(entry => now - narrationQueuedAt(entry) <= MAX_SPEECH_DELAY_MS)
+    .slice(-(MAX_SPEECH_QUEUE - 1));
+  speechQueue.push({ text, queuedAt: now });
+  if (speechBusy && speechQueue.length >= MAX_SPEECH_QUEUE && speechCurrentStartedAt && now - speechCurrentStartedAt > MAX_SPEECH_DELAY_MS) {
+    globalThis.speechSynthesis?.cancel?.();
+  }
+}
+
+function narrationText(entry) {
+  return typeof entry === "string" ? entry : entry?.text || "";
+}
+
+function narrationQueuedAt(entry) {
+  return typeof entry === "string" ? Date.now() : entry?.queuedAt || Date.now();
 }
 
 function narrationKey(text) {
@@ -1215,7 +1249,7 @@ function isDuplicateNarration(text, windowMs = 4500) {
   if (!key) return true;
   const now = Date.now();
   const last = recentNarrations.get(key) || 0;
-  return now - last < windowMs || speechQueue.some(entry => narrationKey(entry) === key);
+  return now - last < windowMs || speechQueue.some(entry => narrationKey(narrationText(entry)) === key);
 }
 
 function markNarrationHeard(text) {
@@ -1243,47 +1277,48 @@ function playSharedNarrations() {
     if (!entry?.id || heardNarrationIds.has(entry.id)) return;
     heardNarrationIds.add(entry.id);
     if (isDuplicateNarration(entry.text)) return;
+    addNarrationLog(entry.text);
     markNarrationHeard(entry.text);
-    speechQueue.push(entry.text);
+    enqueueSpeech(entry.text);
   });
   playNextNarration();
 }
 
 function spokenFrench(text) {
   return text
-    .replace(/\bTempete\b/g, "Tempête")
-    .replace(/\bPenurie\b/g, "Pénurie")
-    .replace(/\bpenurie\b/g, "pénurie")
-    .replace(/\butilisee\b/g, "utilisée")
-    .replace(/\butilise\b/g, "utilisé")
-    .replace(/\butilises\b/g, "utilisés")
-    .replace(/\bactivee\b/g, "activée")
-    .replace(/\bactive\b/g, "activé")
-    .replace(/\bpreparee\b/g, "préparée")
-    .replace(/\bprepare\b/g, "préparé")
-    .replace(/\breanime\b/g, "réanimé")
-    .replace(/\bcreee\b/g, "créée")
-    .replace(/\bcree\b/g, "créé")
-    .replace(/\bprotege\b/g, "protégé")
-    .replace(/\bprotegent\b/g, "protègent")
-    .replace(/\bprive\b/g, "privé")
-    .replace(/\bprives\b/g, "privés")
-    .replace(/\bdepensees\b/g, "dépensées")
-    .replace(/\bdepense\b/g, "dépense")
-    .replace(/\bdepenser\b/g, "dépenser")
-    .replace(/\bdesign(?:e|er)\b/g, match => match.endsWith("er") ? "désigner" : "désigné")
-    .replace(/\bpret\b/g, "prêt")
-    .replace(/\bechappe\b/g, "échappe")
-    .replace(/\bechappent\b/g, "échappent")
-    .replace(/\belimination\b/g, "élimination")
-    .replace(/\belimine\b/g, "éliminé")
-    .replace(/\btue\b/g, "tué")
-    .replace(/\betait\b/g, "était")
-    .replace(/\bete\b/g, "été")
-    .replace(/\bfatiguee\b/g, "fatiguée")
-    .replace(/\breserves\b/g, "réserves")
-    .replace(/\breserve\b/g, "réserve")
-    .replace(/\bile\b/g, "île")
+    .replace(/\bTempete\b/g, "TempÃªte")
+    .replace(/\bPenurie\b/g, "PÃ©nurie")
+    .replace(/\bpenurie\b/g, "pÃ©nurie")
+    .replace(/\butilisee\b/g, "utilisÃ©e")
+    .replace(/\butilise\b/g, "utilisÃ©")
+    .replace(/\butilises\b/g, "utilisÃ©s")
+    .replace(/\bactivee\b/g, "activÃ©e")
+    .replace(/\bactive\b/g, "activÃ©")
+    .replace(/\bpreparee\b/g, "prÃ©parÃ©e")
+    .replace(/\bprepare\b/g, "prÃ©parÃ©")
+    .replace(/\breanime\b/g, "rÃ©animÃ©")
+    .replace(/\bcreee\b/g, "crÃ©Ã©e")
+    .replace(/\bcree\b/g, "crÃ©Ã©")
+    .replace(/\bprotege\b/g, "protÃ©gÃ©")
+    .replace(/\bprotegent\b/g, "protÃ¨gent")
+    .replace(/\bprive\b/g, "privÃ©")
+    .replace(/\bprives\b/g, "privÃ©s")
+    .replace(/\bdepensees\b/g, "dÃ©pensÃ©es")
+    .replace(/\bdepense\b/g, "dÃ©pense")
+    .replace(/\bdepenser\b/g, "dÃ©penser")
+    .replace(/\bdesign(?:e|er)\b/g, match => match.endsWith("er") ? "dÃ©signer" : "dÃ©signÃ©")
+    .replace(/\bpret\b/g, "prÃªt")
+    .replace(/\bechappe\b/g, "Ã©chappe")
+    .replace(/\bechappent\b/g, "Ã©chappent")
+    .replace(/\belimination\b/g, "Ã©limination")
+    .replace(/\belimine\b/g, "Ã©liminÃ©")
+    .replace(/\btue\b/g, "tuÃ©")
+    .replace(/\betait\b/g, "Ã©tait")
+    .replace(/\bete\b/g, "Ã©tÃ©")
+    .replace(/\bfatiguee\b/g, "fatiguÃ©e")
+    .replace(/\breserves\b/g, "rÃ©serves")
+    .replace(/\breserve\b/g, "rÃ©serve")
+    .replace(/\bile\b/g, "Ã®le")
     .replace(/\beau\b/g, "eau");
 }
 
@@ -1293,17 +1328,25 @@ function playNextNarration() {
   if (!synth || !Utterance || speechBusy || !speechQueue.length) return;
 
   speechBusy = true;
-  const utterance = new Utterance(speechQueue.shift());
+  speechQueue = speechQueue.filter(entry => Date.now() - narrationQueuedAt(entry) <= MAX_SPEECH_DELAY_MS);
+  if (!speechQueue.length) {
+    speechBusy = false;
+    return;
+  }
+  speechCurrentStartedAt = Date.now();
+  const utterance = new Utterance(narrationText(speechQueue.shift()));
   utterance.lang = "fr-FR";
   utterance.rate = 0.95;
   utterance.pitch = 0.72;
   utterance.voice = pickMaleFrenchVoice();
   utterance.onend = () => {
     speechBusy = false;
+    speechCurrentStartedAt = 0;
     playNextNarration();
   };
   utterance.onerror = () => {
     speechBusy = false;
+    speechCurrentStartedAt = 0;
     playNextNarration();
   };
   synth.speak(utterance);
@@ -1368,6 +1411,7 @@ function resolveDay() {
   if (game.phase !== "resolve-ready") return;
 
   const summary = [];
+  resolvePendingBotMedkits(summary);
   resolvePendingPistols(summary);
   const resourceGains = { wood: 0, food: 0, water: 0 };
   const actionStats = {
@@ -1417,10 +1461,10 @@ function resolveDay() {
   });
   resolvePendingAssassinKills(summary);
 
-  summary.push(`${actionStats.camp} ${actionStats.camp === 1 ? "a oeuvré" : "ont oeuvré"} pour le camp.`);
-  summary.push(`${actionStats.sleep} ${actionStats.sleep === 1 ? "s'est reposé" : "se sont reposés"}.`);
+  summary.push(`${actionStats.camp} ${actionStats.camp === 1 ? "a oeuvrÃ©" : "ont oeuvrÃ©"} pour le camp.`);
+  summary.push(`${actionStats.sleep} ${actionStats.sleep === 1 ? "s'est reposÃ©" : "se sont reposÃ©s"}.`);
   summary.push(`${actionStats.explore} sont partis en exploration.`);
-  queueNarration(`${actionStats.camp} joueur${actionStats.camp === 1 ? " a" : "s ont"} oeuvré pour le camp.`);
+  queueNarration(`${actionStats.camp} joueur${actionStats.camp === 1 ? " a" : "s ont"} oeuvrÃ© pour le camp.`);
   increaseNeeds(summary);
   triggerEvent(summary);
   applyConditionDamage(summary);
@@ -1437,14 +1481,30 @@ function resolveDay() {
   render();
 }
 
+function resolvePendingBotMedkits(summary) {
+  const pending = game.pendingBotMedkits || [];
+  if (!pending.length) return;
+  let used = 0;
+  pending.forEach(entry => {
+    const player = game.players.find(candidate => candidate.id === entry.playerId);
+    if (!player?.alive || player.leftBehind || player.fatigue <= 0) return;
+    addFatigue(player, -1);
+    used += 1;
+  });
+  game.pendingBotMedkits = [];
+  if (used) {
+    summary.push(`${used} kit${used > 1 ? "s" : ""} de soin ${used > 1 ? "sont utilisÃ©s" : "est utilisÃ©"}.`);
+  }
+}
+
 function resolveCursedMissionAction(player, summary) {
   if (!player.cursed || player.action !== missionAction(player.mission)) return;
   const targets = living().filter(target => target.id !== player.id);
   const target = randomEntry(targets.length ? targets : living());
   if (!target) return;
   addFatigue(target, 1);
-  summary.push(`La malédiction de l'esprit frappe ${target.name}: +1 fatigue.`);
-  queueNarration(`La malédiction de l'esprit frappe ${target.name}. ${target.name} prend une fatigue.`);
+  summary.push(`La malÃ©diction de l'esprit frappe ${target.name}: +1 fatigue.`);
+  queueNarration(`La malÃ©diction de l'esprit frappe ${target.name}. ${target.name} prend une fatigue.`);
 }
 
 function prepareRationReview(resourceGains) {
@@ -1510,7 +1570,6 @@ function resourceBonus(player) {
 }
 
 function needCap(player) {
-  if (player.role === "Enfant" && hasLivingMentor(player)) return 1;
   return player.role === "Survivant" ? 2 : 100;
 }
 
@@ -1559,7 +1618,7 @@ function settleRations() {
         player.wounded = false;
         if (protectChildFromDeath(player)) return;
         changeResource(game, "morale", -18);
-        announceDeath(player, `${player.name} est mort après avoir atteint 2 fatigue.`, `${player.name} est mort après avoir atteint deux points de fatigue.`);
+        announceDeath(player, `${player.name} est mort aprÃ¨s avoir atteint 2 fatigue.`, `${player.name} est mort aprÃ¨s avoir atteint deux points de fatigue.`);
       }
     });
     addLog(`Crise totale: personne ne peut manger ou boire. Tous les joueurs prennent +1 fatigue.`, "important");
@@ -1726,7 +1785,7 @@ function announceFirstShortageVoteDetails() {
 
   if (shielded.length) {
     const names = playerListSentence(shielded);
-    const text = `${shielded.length === 1 ? "Le joueur" : "Les joueurs"} ${names} ${shielded.length === 1 ? "est protégé" : "sont protégés"} par une amulette.`;
+    const text = `${shielded.length === 1 ? "Le joueur" : "Les joueurs"} ${names} ${shielded.length === 1 ? "est protÃ©gÃ©" : "sont protÃ©gÃ©s"} par une amulette.`;
     addLog(text, "important");
     queueNarration(text);
   }
@@ -1790,15 +1849,9 @@ function useItem(playerId, itemId) {
     player.doubleVote = true;
     player.privateNote = "Double vote actif pour le prochain vote de penurie.";
   } else if (item.type === "medkit") {
-    if (player.role === "Enfant" && player.mentorLost) {
-      player.items.push(item);
-      player.privateNote = "Ton mentor est mort: tu ne peux plus utiliser de kit de soin.";
-      render();
-      return;
-    }
     addFatigue(player, -1);
-    player.privateNote = "Kit de soin utilisé: -1 fatigue.";
-    addPendingPublicAnnouncement("Un kit de soin est utilisé.");
+    player.privateNote = "Kit de soin utilisÃ©: -1 fatigue.";
+    addPendingPublicAnnouncement("Un kit de soin est utilisÃ©.");
   }
   render();
 }
@@ -1819,11 +1872,11 @@ function useTargetItem(playerId, itemId) {
       targetId: target.id
     });
     player.privateNote = `Pistolet prepare contre ${target.name}. Le tir sera revele apres les actions.`;
-    addPendingPublicAnnouncement("Un pistolet est préparé.");
+    trackItemActivation("pistol");
   } else if (item.type === "crystal") {
     rememberCrystalSpy(player, target);
     player.privateNote = `Boule de cristal: ${target.name}, role ${target.role}${target.cursed ? ", maudit" : ""}, action ${target.lastAction || "Aucune"}, vote ${target.lastVote || "Aucun vote"}, objets ${itemNames(target)}.`;
-    addPendingPublicAnnouncement("Une boule de cristal est utilisée.");
+    trackItemActivation("crystal");
   }
   render();
 }
@@ -1847,7 +1900,7 @@ function resolvePendingPistols(summary) {
     if (consumePassiveVest(target)) {
       const text = `${target.name} etait vise par le pistolet, mais s'est protege avec un gilet.`;
       summary.push(text);
-      queueNarration(`${target.name} s'est protégé avec un gilet.`);
+      queueNarration(`${target.name} s'est protÃ©gÃ© avec un gilet.`);
       return;
     }
     target.alive = false;
@@ -1870,14 +1923,16 @@ function consumePassiveVest(player) {
 }
 
 function deprivePlayer(player) {
-  announceImportant(`${player.name} ne reçoit pas de ration.`, `${player.name} ne reçoit pas de ration.`);
-  addFatigue(player, 1);
+  if (!player || !player.alive || player.leftBehind) return;
+  announceImportant(`${player.name} ne reÃ§oit pas de ration.`, `${player.name} ne reÃ§oit pas de ration.`);
   if (!game.shortage) {
     game.shortage = { deprivedIds: [], foodNeed: 0, waterNeed: 0, foodMissing: 0, waterMissing: 0 };
   }
   if (!game.shortage.deprivedIds.includes(player.id)) {
     game.shortage.deprivedIds.push(player.id);
   }
+  addFatigue(player, 1);
+  player.privateNote = "Vote de pÃ©nurie: tu n'as pas reÃ§u de ration et tu prends +1 fatigue.";
 
   if (player.fatigue >= 2) {
     player.alive = false;
@@ -1886,7 +1941,7 @@ function deprivePlayer(player) {
       return;
     }
     changeResource(game, "morale", -18);
-    announceDeath(player, `${player.name} est mort après avoir atteint 2 fatigue.`, `${player.name} est mort après avoir atteint deux points de fatigue.`);
+    announceDeath(player, `${player.name} est mort aprÃ¨s avoir atteint 2 fatigue.`, `${player.name} est mort aprÃ¨s avoir atteint deux points de fatigue.`);
   }
 }
 
@@ -1942,8 +1997,8 @@ function assassinPrepareKill(playerId) {
   if (!target.alive || target.leftBehind || target.id === assassin.id || target.fatigue !== 1) return;
   assassin.assassinKillUsed = true;
   assassin.pendingAssassinKill = target.id;
-  assassin.privateNote = `Élimination préparée contre ${target.name}. Elle sera vérifiée après les actions.`;
-  addPendingPublicAnnouncement("Une élimination d'assassin est préparée.");
+  assassin.privateNote = `Ã‰limination prÃ©parÃ©e contre ${target.name}. Elle sera vÃ©rifiÃ©e aprÃ¨s les actions.`;
+  addPendingPublicAnnouncement("Une Ã©limination d'assassin est prÃ©parÃ©e.");
   render();
 }
 
@@ -1954,8 +2009,8 @@ function resolvePendingAssassinKills(summary) {
     assassin.pendingAssassinKill = null;
     if (!target || !target.alive || target.leftBehind || target.fatigue !== 1) {
       assassin.assassinKillUsed = false;
-      assassin.privateNote = "Ta cible n'était plus à 1 fatigue. Ton pouvoir d'élimination revient.";
-      summary.push("Une élimination d'assassin échoue: la cible n'était plus assez fatiguée.");
+      assassin.privateNote = "Ta cible n'Ã©tait plus Ã  1 fatigue. Ton pouvoir d'Ã©limination revient.";
+      summary.push("Une Ã©limination d'assassin Ã©choue: la cible n'Ã©tait plus assez fatiguÃ©e.");
       return;
     }
     target.alive = false;
@@ -1964,7 +2019,7 @@ function resolvePendingAssassinKills(summary) {
     if (protectChildFromDeath(target, summary)) return;
     target.privateNote = "Tu as ete tue par l'assassin.";
     changeResource(game, "morale", -10);
-    pushDeathSummary(summary, target, `${target.name} est mort, tué par l'assassin.`);
+    pushDeathSummary(summary, target, `${target.name} est mort, tuÃ© par l'assassin.`);
   });
 }
 
@@ -1995,7 +2050,7 @@ function resolvePendingSurvivorSupplies(hasShortageBeforeSupply) {
   });
   if (hasShortageBeforeSupply) {
     addLog(`${pending.length} soutien${pending.length > 1 ? "s" : ""} de survivant ajoute${pending.length > 1 ? "nt" : ""} des reserves au camp.`, "important");
-    queueNarration(`${pending.length} soutien${pending.length === 1 ? " de survivant ajoute" : "s de survivant ajoutent"} des réserves au camp.`);
+    queueNarration(`${pending.length} soutien${pending.length === 1 ? " de survivant ajoute" : "s de survivant ajoutent"} des rÃ©serves au camp.`);
   }
   return hasShortageBeforeSupply;
 }
@@ -2009,7 +2064,7 @@ function chamanRevive(playerId) {
   if (target.alive || target.leftBehind) return;
   chaman.chamanReviveUsed = true;
   chaman.pendingChamanRevive = target.id;
-  chaman.privateNote = `Réanimation préparée pour ${target.name}. Elle prendra effet quand tout le monde aura joué.`;
+  chaman.privateNote = `RÃ©animation prÃ©parÃ©e pour ${target.name}. Elle prendra effet quand tout le monde aura jouÃ©.`;
   render();
 }
 
@@ -2020,7 +2075,7 @@ function resolvePendingChamanRevives() {
     chaman.pendingChamanRevive = null;
     if (!target || target.alive || target.leftBehind) {
       chaman.chamanReviveUsed = false;
-      chaman.privateNote = "Réanimation annulée: la cible n'est plus disponible.";
+      chaman.privateNote = "RÃ©animation annulÃ©e: la cible n'est plus disponible.";
       return;
     }
     target.alive = true;
@@ -2029,9 +2084,9 @@ function resolvePendingChamanRevives() {
     target.wounded = false;
     target.revivedById = chaman.id;
     target.revivedByName = chaman.name;
-    target.privateNote = `${chaman.name} t'a réanimé. Tu sais qui t'a sauvé.`;
-    chaman.privateNote = `${target.name} sera réanimé à la révélation du tour.`;
-    addPendingPublicAnnouncement("Un joueur mort est réanimé par un chaman.", "Un joueur mort est réanimé par un chaman.");
+    target.privateNote = `${chaman.name} t'a rÃ©animÃ©. Tu sais qui t'a sauvÃ©.`;
+    chaman.privateNote = `${target.name} sera rÃ©animÃ© Ã  la rÃ©vÃ©lation du tour.`;
+    addPendingPublicAnnouncement("Un joueur mort est rÃ©animÃ© par un chaman.", "Un joueur mort est rÃ©animÃ© par un chaman.");
   });
 }
 
@@ -2054,7 +2109,6 @@ function childCopyMentorItem(playerId) {
   const child = game.players.find(player => player.id === playerId);
   if (!canControlPlayer(child)) return;
   if (!child || child.role !== "Enfant" || !child.alive || child.isBot || game.phase !== "actions") return;
-  if (child.childCopyUses >= 3) return;
   const mentor = mentorFor(child);
   if (!mentor || !mentor.alive || mentor.leftBehind) {
     child.privateNote = "Ton mentor n'est plus disponible: copie impossible.";
@@ -2132,7 +2186,7 @@ function applyConditionDamage(summary) {
       player.alive = false;
       player.wounded = false;
       if (protectChildFromDeath(player, summary)) return;
-      pushDeathSummary(summary, player, `${player.name} est mort après avoir atteint 2 fatigue.`, `${player.name} est mort après avoir atteint deux points de fatigue.`);
+      pushDeathSummary(summary, player, `${player.name} est mort aprÃ¨s avoir atteint 2 fatigue.`, `${player.name} est mort aprÃ¨s avoir atteint deux points de fatigue.`);
     }
   });
   protectLivingChildren(summary);
@@ -2147,6 +2201,8 @@ function clearDayActions() {
   });
   game.votes = {};
   game.pendingPistols = [];
+  game.pendingBotMedkits = [];
+  game.itemActivationsThisTurn = {};
   game.activeIndex = 0;
   game.openPlayerId = null;
   game.selectedAction = null;
@@ -2173,7 +2229,7 @@ function triggerDayStartEvent() {
     player.privateNote = `Jour 5: +1 joie. Joie actuelle: ${player.joy}.`;
   });
   const event = randomEntry(DAY_5_EVENTS);
-  queueNarration(`Évènement du jour cinq: ${spokenDay5EventTitle(event.title)}.`);
+  queueNarration(`Ã‰vÃ¨nement du jour cinq: ${spokenDay5EventTitle(event.title)}.`);
   event.apply(summary);
   applyConditionDamage(summary);
   checkWin();
@@ -2181,7 +2237,7 @@ function triggerDayStartEvent() {
 }
 
 function spokenDay5EventTitle(title) {
-  if (title === "Tempete") return "Tempête";
+  if (title === "Tempete") return "TempÃªte";
   return title;
 }
 
@@ -2307,7 +2363,7 @@ function announceTopVoteResult(targetId, votes) {
   if (!targetId || !votes) return;
   const target = game.players.find(player => player.id === targetId);
   if (!target) return;
-  const text = `${target.name} a reçu le plus de voix: ${votes} voix.`;
+  const text = `${target.name} a reÃ§u le plus de voix: ${votes} voix.`;
   addLog(text, "important");
   queueNarration(text);
 }
@@ -2413,14 +2469,14 @@ function renderIdentityModal() {
     <div class="overlay">
       <section class="modal identity-modal">
         <h1>Choisis ton personnage</h1>
-        <p>Chaque joueur humain contrôle uniquement son personnage: ses objets, son rôle, ses actions et ses votes.</p>
+        <p>Chaque joueur humain contrÃ´le uniquement son personnage: ses objets, son rÃ´le, ses actions et ses votes.</p>
         <div class="identity-grid">
           ${humans.map(player => {
             const taken = Boolean(player.ownerId && player.ownerId !== ONLINE_CLIENT_ID);
             return `
               <button class="identity-card ${taken ? "taken" : ""}" ${taken ? "disabled" : ""} onclick="choosePlayerIdentity('${player.id}')">
                 <strong>${player.name}</strong>
-                <span>${taken ? "déjà choisi" : "choisir ce personnage"}</span>
+                <span>${taken ? "dÃ©jÃ  choisi" : "choisir ce personnage"}</span>
               </button>
             `;
           }).join("")}
@@ -2470,7 +2526,7 @@ function renderSetup() {
               </label>
               <label>Mode humain
                 <select id="play-mode" onchange="saveSetupDraft()">
-                  <option value="sameScreen" ${setup.playMode === "sameScreen" ? "selected" : ""}>Même écran</option>
+                  <option value="sameScreen" ${setup.playMode === "sameScreen" ? "selected" : ""}>MÃªme Ã©cran</option>
                   <option value="separateDevices" ${setup.playMode === "separateDevices" ? "selected" : ""}>Chacun son appareil</option>
                 </select>
               </label>
@@ -2581,7 +2637,7 @@ function renderOnlineGameControls() {
       </div>
       <div class="online-actions">
         ${releaseButton}
-        <button onclick="createOnlineRoom()">Créer salon</button>
+        <button onclick="createOnlineRoom()">CrÃ©er salon</button>
         <input id="online-room-code" maxlength="5" placeholder="Code">
         <button onclick="joinOnlineRoom('online-room-code')">Rejoindre</button>
       </div>
@@ -2873,7 +2929,7 @@ function renderRationReview() {
     <div class="ration-review">
       <div>
         <div class="item-title">Ressources recoltees</div>
-        <p class="role">${review.campWorkers} joueur${review.campWorkers > 1 ? "s" : ""} ${review.campWorkers === 1 ? "a participé" : "ont participé"} au camp.</p>
+        <p class="role">${review.campWorkers} joueur${review.campWorkers > 1 ? "s" : ""} ${review.campWorkers === 1 ? "a participÃ©" : "ont participÃ©"} au camp.</p>
         <div class="gain-row">
           <span class="tag mission-wood">bois +${review.gains.wood}</span>
           <span class="tag hunger">nourriture +${review.gains.food}</span>
@@ -3035,11 +3091,11 @@ function renderEnfantPowers(player) {
   const mentor = mentorFor(player);
   const ownItems = player.items.filter(item => item.availableDay <= game.day);
   const mentorItems = mentor?.alive ? mentor.items.filter(item => item.availableDay <= game.day) : [];
-  const disabled = player.childCopyUses >= 3 || !ownItems.length || !mentorItems.length || !mentor?.alive || mentor.leftBehind;
+  const disabled = !ownItems.length || !mentorItems.length || !mentor?.alive || mentor.leftBehind;
   return `
     <div class="role-powers">
       <div class="item-row">
-        <span><span class="tag">Pouvoir</span> Copie ${player.childCopyUses || 0}/3</span>
+        <span><span class="tag">Pouvoir</span> Copie illimitÃ©e${player.childCopyUses ? ` (${player.childCopyUses})` : ""}</span>
         <select id="child-discard-${player.id}" ${disabled ? "disabled" : ""}>
           ${ownItems.length ? ownItems.map(item => `<option value="${item.id}">Jeter ${ITEMS[item.type]}</option>`).join("") : `<option>Aucun objet</option>`}
         </select>
@@ -3251,7 +3307,7 @@ function renderVoteControls() {
 
 function voteStatusLabel(voter) {
   if (game.votes[voter.id] === "none") return "aucun choix";
-  if (game.votes[voter.id]) return voter.isBot ? "vote cache" : "vote secret reçu";
+  if (game.votes[voter.id]) return voter.isBot ? "vote cache" : "vote secret reÃ§u";
   if (!voteTargetsFor(voter).length) return "aucun choix";
   if (!voter.isBot && game.playMode === "separateDevices" && humanPlayers().length >= 2 && !canControlPlayer(voter)) return "en attente";
   return voter.isBot ? "vote cache" : "vote secret attendu";
