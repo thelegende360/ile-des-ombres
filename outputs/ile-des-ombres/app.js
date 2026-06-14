@@ -19,15 +19,15 @@ const ITEMS = {
 };
 const ITEM_EFFECTS = {
   pistol: "Tue un joueur apres que tous les joueurs ont choisi leur action. Usage unique.",
-  amulet: "ProtÃ¨ge d'un vote de pÃ©nurie complet. Usage unique.",
+  amulet: "Protège d'un vote de pénurie complet. Usage unique.",
   crystal: "Regarde le role secret, la derniere action et le dernier vote d'un joueur. Usage unique.",
-  doubleVote: "Ton vote compte double pendant un vote de pÃ©nurie complet. Usage unique.",
+  doubleVote: "Ton vote compte double pendant un vote de pénurie complet. Usage unique.",
   medkit: "Retire 1 fatigue. Usage unique.",
   vest: "Encaisse automatiquement un tir de pistolet. Usage unique."
 };
 const ROLES = ["Assassin", "Robinson", "Chaman", "Survivant", "Enfant", "Chien"];
 const ROLE_EFFECTS = {
-  Assassin: "Vole 1 objet une fois. Peut Ã©liminer un joueur Ã  1 fatigue une fois. Pistolet +20%, Double vote +10%, Boule de cristal -20%, Kit de soin -10%.",
+  Assassin: "Vole 1 objet une fois. Peut éliminer un joueur à 1 fatigue une fois. Pistolet +20%, Double vote +10%, Boule de cristal -20%, Kit de soin -10%.",
   Robinson: "Commence avec 1 objet de plus. Peut dormir +1 fois et explorer +1 fois. Kit de soin +10%, Boule de cristal -10%.",
   Chaman: "Boule de cristal +10%, Amulette +10%, Double vote -20%.",
   Survivant: "+1 ressource sur bois/eau/nourriture. Faim et soif max 2. Gilet +10%, Kit de soin +10%, Boule de cristal -10%, Double vote -10%.",
@@ -37,7 +37,7 @@ const ROLE_EFFECTS = {
 const ROLE_SUMMARY = {
   Assassin: {
     objects: "Pistolet +20%, Double vote +10%, Boule de cristal -20%, Kit de soin -10%.",
-    powers: "Vole 1 objet Ã  un joueur une fois. Peut prÃ©parer l'Ã©limination d'un joueur Ã  1 fatigue; si la cible n'est plus fatiguÃ©e Ã  la rÃ©solution, le pouvoir revient."
+    powers: "Vole 1 objet à un joueur une fois. Peut préparer l'élimination d'un joueur à 1 fatigue; si la cible n'est plus fatiguée à la résolution, le pouvoir revient."
   },
   Robinson: {
     objects: "Kit de soin +10%, Boule de cristal -10%.",
@@ -49,7 +49,7 @@ const ROLE_SUMMARY = {
   },
   Survivant: {
     objects: "Gilet +10%, Kit de soin +10%, Boule de cristal -10%, Double vote -10%.",
-    powers: "+1 ressource quand il coupe du bois, pÃªche ou cherche de l'eau. Sa faim et sa soif ne peuvent pas dÃ©passer 2. Une fois, peut ajouter 3 nourriture et 3 eau si une pÃ©nurie arrive en fin de tour."
+    powers: "+1 ressource quand il coupe du bois, pêche ou cherche de l'eau. Sa faim et sa soif ne peuvent pas dépasser 2. Une fois, peut ajouter 3 nourriture et 3 eau si une pénurie arrive en fin de tour."
   },
   Enfant: {
     objects: "Aucun modificateur.",
@@ -94,7 +94,7 @@ const EVENTS = [
     }
   },
   {
-    title: "Baies amÃ¨res",
+    title: "Baies amères",
     text: "Un repas douteux fait chuter le moral du camp.",
     apply: game => changeResource(game, "morale", -5)
   },
@@ -512,7 +512,7 @@ function useBotMedkit(player) {
   if (!item) return false;
   game.pendingBotMedkits = game.pendingBotMedkits || [];
   game.pendingBotMedkits.push({ playerId: player.id });
-  addPendingPublicAnnouncement("Un kit de soin est utilisÃ©.");
+  addPendingPublicAnnouncement("Un kit de soin est utilisé.");
   return true;
 }
 
@@ -560,7 +560,7 @@ function useBotAssassinPowers(assassin) {
       assassin.assassinKillUsed = true;
       assassin.pendingAssassinKill = killTarget.id;
       assassin.privateNote = `Elimination preparee contre ${killTarget.name}.`;
-      addPendingPublicAnnouncement("Une Ã©limination d'assassin est prÃ©parÃ©e.");
+      addPendingPublicAnnouncement("Une élimination d'assassin est préparée.");
     }
   }
 
@@ -825,7 +825,7 @@ function newGame(config = {}) {
   const humanCount = clamp(Number.isFinite(configuredHumans) ? configuredHumans : totalPlayers, 0, totalPlayers);
   const names = Array.from({ length: totalPlayers }, (_, index) => {
     const fallback = index < humanCount ? START_NAMES[index] : BOT_NAMES[index % BOT_NAMES.length];
-    return (config.names?.[index] || fallback).trim() || fallback;
+    return cleanPlayerName(config.names?.[index], fallback);
   });
   const roles = rolePool(config, totalPlayers);
   const missions = balancedMissions(names.length);
@@ -998,7 +998,7 @@ function applyOnlineGame(state, version = online.version) {
   game.bottomDrawer = game.bottomDrawer || null;
   online.version = version;
   playSharedNarrations();
-  online.status = `SynchronisÃ© (${online.roomCode})`;
+  online.status = `Synchronisé (${online.roomCode})`;
   render();
   online.applyingRemote = false;
 }
@@ -1059,7 +1059,7 @@ async function publishOnlineState() {
       })
     });
     online.version = data.version || online.version;
-    online.status = `SynchronisÃ© (${online.roomCode})`;
+    online.status = `Synchronisé (${online.roomCode})`;
   } catch (error) {
     online.status = error.message || "Synchronisation impossible";
   }
@@ -1078,7 +1078,7 @@ async function fetchOnlineState() {
       applyOnlineGame(data.state, data.version);
     } else {
       online.version = Math.max(online.version, data.version || 0);
-      online.status = `SynchronisÃ© (${online.roomCode})`;
+      online.status = `Synchronisé (${online.roomCode})`;
     }
   } catch (error) {
     online.status = error.message || "Salon indisponible";
@@ -1092,12 +1092,12 @@ async function createOnlineRoom() {
     online.roomCode = data.code;
     online.connected = true;
     online.version = 0;
-    online.status = `Salon crÃ©Ã©: ${data.code}`;
+    online.status = `Salon créé: ${data.code}`;
     await publishOnlineState();
     startOnlinePolling();
     render();
   } catch (error) {
-    online.status = "Lance le serveur en ligne pour crÃ©er un salon.";
+    online.status = "Lance le serveur en ligne pour créer un salon.";
     render();
   }
 }
@@ -1150,11 +1150,11 @@ function deathTextWithRole(player, text) {
 }
 
 function announceDeath(player, text, narration = text) {
-  announceImportant(deathTextWithRole(player, text), `${narration} Son rÃ´le Ã©tait ${player.role}.`);
+  announceImportant(deathTextWithRole(player, text), `${narration} Son rôle était ${player.role}.`);
 }
 
 function pushDeathSummary(summary, player, text, narration = text) {
-  pushImportantSummary(summary, deathTextWithRole(player, text), `${narration} Son rÃ´le Ã©tait ${player.role}.`);
+  pushImportantSummary(summary, deathTextWithRole(player, text), `${narration} Son rôle était ${player.role}.`);
 }
 
 function addPendingPublicAnnouncement(text, narration = text) {
@@ -1173,14 +1173,14 @@ function pendingItemActivationAnnouncements() {
   const announcements = [];
   if (counts.pistol) {
     announcements.push({
-      text: `${counts.pistol} pistolet${counts.pistol > 1 ? "s" : ""} ${counts.pistol > 1 ? "sont prÃ©parÃ©s" : "est prÃ©parÃ©"} ce tour-ci.`,
-      narration: `${counts.pistol} pistolet${counts.pistol > 1 ? "s" : ""} ${counts.pistol > 1 ? "sont prÃ©parÃ©s" : "est prÃ©parÃ©"} ce tour-ci.`
+      text: `${counts.pistol} pistolet${counts.pistol > 1 ? "s" : ""} ${counts.pistol > 1 ? "sont préparés" : "est préparé"} ce tour-ci.`,
+      narration: `${counts.pistol} pistolet${counts.pistol > 1 ? "s" : ""} ${counts.pistol > 1 ? "sont préparés" : "est préparé"} ce tour-ci.`
     });
   }
   if (counts.crystal) {
     announcements.push({
-      text: `${counts.crystal} boule${counts.crystal > 1 ? "s" : ""} de cristal ${counts.crystal > 1 ? "sont utilisÃ©es" : "est utilisÃ©e"} ce tour-ci.`,
-      narration: `${counts.crystal} boule${counts.crystal > 1 ? "s" : ""} de cristal ${counts.crystal > 1 ? "sont utilisÃ©es" : "est utilisÃ©e"} ce tour-ci.`
+      text: `${counts.crystal} boule${counts.crystal > 1 ? "s" : ""} de cristal ${counts.crystal > 1 ? "sont utilisées" : "est utilisée"} ce tour-ci.`,
+      narration: `${counts.crystal} boule${counts.crystal > 1 ? "s" : ""} de cristal ${counts.crystal > 1 ? "sont utilisées" : "est utilisée"} ce tour-ci.`
     });
   }
   return announcements;
@@ -1285,41 +1285,75 @@ function playSharedNarrations() {
 }
 
 function spokenFrench(text) {
-  return text
-    .replace(/\bTempete\b/g, "TempÃªte")
-    .replace(/\bPenurie\b/g, "PÃ©nurie")
-    .replace(/\bpenurie\b/g, "pÃ©nurie")
-    .replace(/\butilisee\b/g, "utilisÃ©e")
-    .replace(/\butilise\b/g, "utilisÃ©")
-    .replace(/\butilises\b/g, "utilisÃ©s")
-    .replace(/\bactivee\b/g, "activÃ©e")
-    .replace(/\bactive\b/g, "activÃ©")
-    .replace(/\bpreparee\b/g, "prÃ©parÃ©e")
-    .replace(/\bprepare\b/g, "prÃ©parÃ©")
-    .replace(/\breanime\b/g, "rÃ©animÃ©")
-    .replace(/\bcreee\b/g, "crÃ©Ã©e")
-    .replace(/\bcree\b/g, "crÃ©Ã©")
-    .replace(/\bprotege\b/g, "protÃ©gÃ©")
-    .replace(/\bprotegent\b/g, "protÃ¨gent")
-    .replace(/\bprive\b/g, "privÃ©")
-    .replace(/\bprives\b/g, "privÃ©s")
-    .replace(/\bdepensees\b/g, "dÃ©pensÃ©es")
-    .replace(/\bdepense\b/g, "dÃ©pense")
-    .replace(/\bdepenser\b/g, "dÃ©penser")
-    .replace(/\bdesign(?:e|er)\b/g, match => match.endsWith("er") ? "dÃ©signer" : "dÃ©signÃ©")
-    .replace(/\bpret\b/g, "prÃªt")
-    .replace(/\bechappe\b/g, "Ã©chappe")
-    .replace(/\bechappent\b/g, "Ã©chappent")
-    .replace(/\belimination\b/g, "Ã©limination")
-    .replace(/\belimine\b/g, "Ã©liminÃ©")
-    .replace(/\btue\b/g, "tuÃ©")
-    .replace(/\betait\b/g, "Ã©tait")
-    .replace(/\bete\b/g, "Ã©tÃ©")
-    .replace(/\bfatiguee\b/g, "fatiguÃ©e")
-    .replace(/\breserves\b/g, "rÃ©serves")
-    .replace(/\breserve\b/g, "rÃ©serve")
-    .replace(/\bile\b/g, "Ã®le")
-    .replace(/\beau\b/g, "eau");
+  return cleanSpeechText(text)
+    .replace(/\bTempete\b/g, "\u0054emp\u00eate")
+    .replace(/\bPenurie\b/g, "\u0050\u00e9nurie")
+    .replace(/\bpenurie\b/g, "\u0070\u00e9nurie")
+    .replace(/\butilisee\b/g, "\u0075tilis\u00e9e")
+    .replace(/\butilise\b/g, "\u0075tilis\u00e9")
+    .replace(/\butilises\b/g, "\u0075tilis\u00e9s")
+    .replace(/\bactivee\b/g, "\u0061ctiv\u00e9e")
+    .replace(/\bactive\b/g, "\u0061ctiv\u00e9")
+    .replace(/\bpreparee\b/g, "\u0070r\u00e9par\u00e9e")
+    .replace(/\bprepare\b/g, "\u0070r\u00e9par\u00e9")
+    .replace(/\breanime\b/g, "\u0072\u00e9anim\u00e9")
+    .replace(/\bcreee\b/g, "\u0063r\u00e9\u00e9e")
+    .replace(/\bcree\b/g, "\u0063r\u00e9\u00e9")
+    .replace(/\bprotege\b/g, "\u0070rot\u00e9g\u00e9")
+    .replace(/\bprotegent\b/g, "\u0070rot\u00e8gent")
+    .replace(/\bprive\b/g, "\u0070riv\u00e9")
+    .replace(/\bprives\b/g, "\u0070riv\u00e9s")
+    .replace(/\bdepensees\b/g, "\u0064\u00e9pens\u00e9es")
+    .replace(/\bdepense\b/g, "\u0064\u00e9pense")
+    .replace(/\bdepenser\b/g, "\u0064\u00e9penser")
+    .replace(/\bdesign(?:e|er)\b/g, match => match.endsWith("er") ? "\u0064\u00e9signer" : "\u0064\u00e9sign\u00e9")
+    .replace(/\bpret\b/g, "\u0070r\u00eat")
+    .replace(/\bechappe\b/g, "\u00e9chappe")
+    .replace(/\bechappent\b/g, "\u00e9chappent")
+    .replace(/\belimination\b/g, "\u00e9limination")
+    .replace(/\belimine\b/g, "\u00e9limin\u00e9")
+    .replace(/\btue\b/g, "\u0074u\u00e9")
+    .replace(/\betait\b/g, "\u00e9tait")
+    .replace(/\bete\b/g, "\u00e9t\u00e9")
+    .replace(/\bfatiguee\b/g, "\u0066atigu\u00e9e")
+    .replace(/\breserves\b/g, "\u0072\u00e9serves")
+    .replace(/\breserve\b/g, "\u0072\u00e9serve")
+    .replace(/\bile\b/g, "\u00eele")
+    .replace(/\beau\b/g, "eau")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanSpeechText(text) {
+  return String(text || "")
+    .normalize("NFKC")
+    .replace(/Ã©/g, "\u00e9")
+    .replace(/Ã¨/g, "\u00e8")
+    .replace(/Ãª/g, "\u00ea")
+    .replace(/Ã«/g, "\u00eb")
+    .replace(/Ã /g, "\u00e0")
+    .replace(/Ã¢/g, "\u00e2")
+    .replace(/Ã®/g, "\u00ee")
+    .replace(/Ã¯/g, "\u00ef")
+    .replace(/Ã´/g, "\u00f4")
+    .replace(/Ã»/g, "\u00fb")
+    .replace(/Ã¹/g, "\u00f9")
+    .replace(/Ã§/g, "\u00e7")
+    .replace(/â€™/g, "'")
+    .replace(/â€œ|â€/g, "\"")
+    .replace(/â€“|â€”/g, "-")
+    .replace(/[\u00a9\u00ae\u2122]/g, "")
+    .replace(/[^\p{L}\p{N}\s.,;:!?'"’()\-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanPlayerName(name, fallback) {
+  const cleaned = cleanSpeechText(name || fallback)
+    .replace(/[.,;:!?'"’()]/g, "")
+    .slice(0, 14)
+    .trim();
+  return cleaned || fallback;
 }
 
 function playNextNarration() {
@@ -1461,10 +1495,10 @@ function resolveDay() {
   });
   resolvePendingAssassinKills(summary);
 
-  summary.push(`${actionStats.camp} ${actionStats.camp === 1 ? "a oeuvrÃ©" : "ont oeuvrÃ©"} pour le camp.`);
-  summary.push(`${actionStats.sleep} ${actionStats.sleep === 1 ? "s'est reposÃ©" : "se sont reposÃ©s"}.`);
+  summary.push(`${actionStats.camp} ${actionStats.camp === 1 ? "a oeuvré" : "ont oeuvré"} pour le camp.`);
+  summary.push(`${actionStats.sleep} ${actionStats.sleep === 1 ? "s'est reposé" : "se sont reposés"}.`);
   summary.push(`${actionStats.explore} sont partis en exploration.`);
-  queueNarration(`${actionStats.camp} joueur${actionStats.camp === 1 ? " a" : "s ont"} oeuvrÃ© pour le camp.`);
+  queueNarration(`${actionStats.camp} joueur${actionStats.camp === 1 ? " a" : "s ont"} oeuvré pour le camp.`);
   increaseNeeds(summary);
   triggerEvent(summary);
   applyConditionDamage(summary);
@@ -1493,7 +1527,7 @@ function resolvePendingBotMedkits(summary) {
   });
   game.pendingBotMedkits = [];
   if (used) {
-    summary.push(`${used} kit${used > 1 ? "s" : ""} de soin ${used > 1 ? "sont utilisÃ©s" : "est utilisÃ©"}.`);
+    summary.push(`${used} kit${used > 1 ? "s" : ""} de soin ${used > 1 ? "sont utilisés" : "est utilisé"}.`);
   }
 }
 
@@ -1503,8 +1537,8 @@ function resolveCursedMissionAction(player, summary) {
   const target = randomEntry(targets.length ? targets : living());
   if (!target) return;
   addFatigue(target, 1);
-  summary.push(`La malÃ©diction de l'esprit frappe ${target.name}: +1 fatigue.`);
-  queueNarration(`La malÃ©diction de l'esprit frappe ${target.name}. ${target.name} prend une fatigue.`);
+  summary.push(`La malédiction de l'esprit frappe ${target.name}: +1 fatigue.`);
+  queueNarration(`La malédiction de l'esprit frappe ${target.name}. ${target.name} prend une fatigue.`);
 }
 
 function prepareRationReview(resourceGains) {
@@ -1618,7 +1652,7 @@ function settleRations() {
         player.wounded = false;
         if (protectChildFromDeath(player)) return;
         changeResource(game, "morale", -18);
-        announceDeath(player, `${player.name} est mort aprÃ¨s avoir atteint 2 fatigue.`, `${player.name} est mort aprÃ¨s avoir atteint deux points de fatigue.`);
+        announceDeath(player, `${player.name} est mort après avoir atteint 2 fatigue.`, `${player.name} est mort après avoir atteint deux points de fatigue.`);
       }
     });
     addLog(`Crise totale: personne ne peut manger ou boire. Tous les joueurs prennent +1 fatigue.`, "important");
@@ -1785,7 +1819,7 @@ function announceFirstShortageVoteDetails() {
 
   if (shielded.length) {
     const names = playerListSentence(shielded);
-    const text = `${shielded.length === 1 ? "Le joueur" : "Les joueurs"} ${names} ${shielded.length === 1 ? "est protÃ©gÃ©" : "sont protÃ©gÃ©s"} par une amulette.`;
+    const text = `${shielded.length === 1 ? "Le joueur" : "Les joueurs"} ${names} ${shielded.length === 1 ? "est protégé" : "sont protégés"} par une amulette.`;
     addLog(text, "important");
     queueNarration(text);
   }
@@ -1850,8 +1884,8 @@ function useItem(playerId, itemId) {
     player.privateNote = "Double vote actif pour le prochain vote de penurie.";
   } else if (item.type === "medkit") {
     addFatigue(player, -1);
-    player.privateNote = "Kit de soin utilisÃ©: -1 fatigue.";
-    addPendingPublicAnnouncement("Un kit de soin est utilisÃ©.");
+    player.privateNote = "Kit de soin utilisé: -1 fatigue.";
+    addPendingPublicAnnouncement("Un kit de soin est utilisé.");
   }
   render();
 }
@@ -1900,7 +1934,7 @@ function resolvePendingPistols(summary) {
     if (consumePassiveVest(target)) {
       const text = `${target.name} etait vise par le pistolet, mais s'est protege avec un gilet.`;
       summary.push(text);
-      queueNarration(`${target.name} s'est protÃ©gÃ© avec un gilet.`);
+      queueNarration(`${target.name} s'est protégé avec un gilet.`);
       return;
     }
     target.alive = false;
@@ -1924,7 +1958,7 @@ function consumePassiveVest(player) {
 
 function deprivePlayer(player) {
   if (!player || !player.alive || player.leftBehind) return;
-  announceImportant(`${player.name} ne reÃ§oit pas de ration.`, `${player.name} ne reÃ§oit pas de ration.`);
+  announceImportant(`${player.name} ne reçoit pas de ration.`, `${player.name} ne reçoit pas de ration.`);
   if (!game.shortage) {
     game.shortage = { deprivedIds: [], foodNeed: 0, waterNeed: 0, foodMissing: 0, waterMissing: 0 };
   }
@@ -1932,7 +1966,7 @@ function deprivePlayer(player) {
     game.shortage.deprivedIds.push(player.id);
   }
   addFatigue(player, 1);
-  player.privateNote = "Vote de pÃ©nurie: tu n'as pas reÃ§u de ration et tu prends +1 fatigue.";
+  player.privateNote = "Vote de pénurie: tu n'as pas reçu de ration et tu prends +1 fatigue.";
 
   if (player.fatigue >= 2) {
     player.alive = false;
@@ -1941,7 +1975,7 @@ function deprivePlayer(player) {
       return;
     }
     changeResource(game, "morale", -18);
-    announceDeath(player, `${player.name} est mort aprÃ¨s avoir atteint 2 fatigue.`, `${player.name} est mort aprÃ¨s avoir atteint deux points de fatigue.`);
+    announceDeath(player, `${player.name} est mort après avoir atteint 2 fatigue.`, `${player.name} est mort après avoir atteint deux points de fatigue.`);
   }
 }
 
@@ -1997,8 +2031,8 @@ function assassinPrepareKill(playerId) {
   if (!target.alive || target.leftBehind || target.id === assassin.id || target.fatigue !== 1) return;
   assassin.assassinKillUsed = true;
   assassin.pendingAssassinKill = target.id;
-  assassin.privateNote = `Ã‰limination prÃ©parÃ©e contre ${target.name}. Elle sera vÃ©rifiÃ©e aprÃ¨s les actions.`;
-  addPendingPublicAnnouncement("Une Ã©limination d'assassin est prÃ©parÃ©e.");
+  assassin.privateNote = `Élimination préparée contre ${target.name}. Elle sera vérifiée après les actions.`;
+  addPendingPublicAnnouncement("Une élimination d'assassin est préparée.");
   render();
 }
 
@@ -2009,8 +2043,8 @@ function resolvePendingAssassinKills(summary) {
     assassin.pendingAssassinKill = null;
     if (!target || !target.alive || target.leftBehind || target.fatigue !== 1) {
       assassin.assassinKillUsed = false;
-      assassin.privateNote = "Ta cible n'Ã©tait plus Ã  1 fatigue. Ton pouvoir d'Ã©limination revient.";
-      summary.push("Une Ã©limination d'assassin Ã©choue: la cible n'Ã©tait plus assez fatiguÃ©e.");
+      assassin.privateNote = "Ta cible n'était plus à 1 fatigue. Ton pouvoir d'élimination revient.";
+      summary.push("Une élimination d'assassin échoue: la cible n'était plus assez fatiguée.");
       return;
     }
     target.alive = false;
@@ -2019,7 +2053,7 @@ function resolvePendingAssassinKills(summary) {
     if (protectChildFromDeath(target, summary)) return;
     target.privateNote = "Tu as ete tue par l'assassin.";
     changeResource(game, "morale", -10);
-    pushDeathSummary(summary, target, `${target.name} est mort, tuÃ© par l'assassin.`);
+    pushDeathSummary(summary, target, `${target.name} est mort, tué par l'assassin.`);
   });
 }
 
@@ -2050,7 +2084,7 @@ function resolvePendingSurvivorSupplies(hasShortageBeforeSupply) {
   });
   if (hasShortageBeforeSupply) {
     addLog(`${pending.length} soutien${pending.length > 1 ? "s" : ""} de survivant ajoute${pending.length > 1 ? "nt" : ""} des reserves au camp.`, "important");
-    queueNarration(`${pending.length} soutien${pending.length === 1 ? " de survivant ajoute" : "s de survivant ajoutent"} des rÃ©serves au camp.`);
+    queueNarration(`${pending.length} soutien${pending.length === 1 ? " de survivant ajoute" : "s de survivant ajoutent"} des réserves au camp.`);
   }
   return hasShortageBeforeSupply;
 }
@@ -2064,7 +2098,7 @@ function chamanRevive(playerId) {
   if (target.alive || target.leftBehind) return;
   chaman.chamanReviveUsed = true;
   chaman.pendingChamanRevive = target.id;
-  chaman.privateNote = `RÃ©animation prÃ©parÃ©e pour ${target.name}. Elle prendra effet quand tout le monde aura jouÃ©.`;
+  chaman.privateNote = `Réanimation préparée pour ${target.name}. Elle prendra effet quand tout le monde aura joué.`;
   render();
 }
 
@@ -2075,7 +2109,7 @@ function resolvePendingChamanRevives() {
     chaman.pendingChamanRevive = null;
     if (!target || target.alive || target.leftBehind) {
       chaman.chamanReviveUsed = false;
-      chaman.privateNote = "RÃ©animation annulÃ©e: la cible n'est plus disponible.";
+      chaman.privateNote = "Réanimation annulée: la cible n'est plus disponible.";
       return;
     }
     target.alive = true;
@@ -2084,9 +2118,9 @@ function resolvePendingChamanRevives() {
     target.wounded = false;
     target.revivedById = chaman.id;
     target.revivedByName = chaman.name;
-    target.privateNote = `${chaman.name} t'a rÃ©animÃ©. Tu sais qui t'a sauvÃ©.`;
-    chaman.privateNote = `${target.name} sera rÃ©animÃ© Ã  la rÃ©vÃ©lation du tour.`;
-    addPendingPublicAnnouncement("Un joueur mort est rÃ©animÃ© par un chaman.", "Un joueur mort est rÃ©animÃ© par un chaman.");
+    target.privateNote = `${chaman.name} t'a réanimé. Tu sais qui t'a sauvé.`;
+    chaman.privateNote = `${target.name} sera réanimé à la révélation du tour.`;
+    addPendingPublicAnnouncement("Un joueur mort est réanimé par un chaman.", "Un joueur mort est réanimé par un chaman.");
   });
 }
 
@@ -2186,7 +2220,7 @@ function applyConditionDamage(summary) {
       player.alive = false;
       player.wounded = false;
       if (protectChildFromDeath(player, summary)) return;
-      pushDeathSummary(summary, player, `${player.name} est mort aprÃ¨s avoir atteint 2 fatigue.`, `${player.name} est mort aprÃ¨s avoir atteint deux points de fatigue.`);
+      pushDeathSummary(summary, player, `${player.name} est mort après avoir atteint 2 fatigue.`, `${player.name} est mort après avoir atteint deux points de fatigue.`);
     }
   });
   protectLivingChildren(summary);
@@ -2229,7 +2263,7 @@ function triggerDayStartEvent() {
     player.privateNote = `Jour 5: +1 joie. Joie actuelle: ${player.joy}.`;
   });
   const event = randomEntry(DAY_5_EVENTS);
-  queueNarration(`Ã‰vÃ¨nement du jour cinq: ${spokenDay5EventTitle(event.title)}.`);
+  queueNarration(`Évènement du jour cinq: ${spokenDay5EventTitle(event.title)}.`);
   event.apply(summary);
   applyConditionDamage(summary);
   checkWin();
@@ -2237,7 +2271,7 @@ function triggerDayStartEvent() {
 }
 
 function spokenDay5EventTitle(title) {
-  if (title === "Tempete") return "TempÃªte";
+  if (title === "Tempete") return "Tempête";
   return title;
 }
 
@@ -2363,7 +2397,7 @@ function announceTopVoteResult(targetId, votes) {
   if (!targetId || !votes) return;
   const target = game.players.find(player => player.id === targetId);
   if (!target) return;
-  const text = `${target.name} a reÃ§u le plus de voix: ${votes} voix.`;
+  const text = `${target.name} a reçu le plus de voix: ${votes} voix.`;
   addLog(text, "important");
   queueNarration(text);
 }
@@ -2469,14 +2503,14 @@ function renderIdentityModal() {
     <div class="overlay">
       <section class="modal identity-modal">
         <h1>Choisis ton personnage</h1>
-        <p>Chaque joueur humain contrÃ´le uniquement son personnage: ses objets, son rÃ´le, ses actions et ses votes.</p>
+        <p>Chaque joueur humain contrôle uniquement son personnage: ses objets, son rôle, ses actions et ses votes.</p>
         <div class="identity-grid">
           ${humans.map(player => {
             const taken = Boolean(player.ownerId && player.ownerId !== ONLINE_CLIENT_ID);
             return `
               <button class="identity-card ${taken ? "taken" : ""}" ${taken ? "disabled" : ""} onclick="choosePlayerIdentity('${player.id}')">
                 <strong>${player.name}</strong>
-                <span>${taken ? "dÃ©jÃ  choisi" : "choisir ce personnage"}</span>
+                <span>${taken ? "déjà choisi" : "choisir ce personnage"}</span>
               </button>
             `;
           }).join("")}
@@ -2526,7 +2560,7 @@ function renderSetup() {
               </label>
               <label>Mode humain
                 <select id="play-mode" onchange="saveSetupDraft()">
-                  <option value="sameScreen" ${setup.playMode === "sameScreen" ? "selected" : ""}>MÃªme Ã©cran</option>
+                  <option value="sameScreen" ${setup.playMode === "sameScreen" ? "selected" : ""}>Même écran</option>
                   <option value="separateDevices" ${setup.playMode === "separateDevices" ? "selected" : ""}>Chacun son appareil</option>
                 </select>
               </label>
@@ -2637,7 +2671,7 @@ function renderOnlineGameControls() {
       </div>
       <div class="online-actions">
         ${releaseButton}
-        <button onclick="createOnlineRoom()">CrÃ©er salon</button>
+        <button onclick="createOnlineRoom()">Créer salon</button>
         <input id="online-room-code" maxlength="5" placeholder="Code">
         <button onclick="joinOnlineRoom('online-room-code')">Rejoindre</button>
       </div>
@@ -2929,7 +2963,7 @@ function renderRationReview() {
     <div class="ration-review">
       <div>
         <div class="item-title">Ressources recoltees</div>
-        <p class="role">${review.campWorkers} joueur${review.campWorkers > 1 ? "s" : ""} ${review.campWorkers === 1 ? "a participÃ©" : "ont participÃ©"} au camp.</p>
+        <p class="role">${review.campWorkers} joueur${review.campWorkers > 1 ? "s" : ""} ${review.campWorkers === 1 ? "a participé" : "ont participé"} au camp.</p>
         <div class="gain-row">
           <span class="tag mission-wood">bois +${review.gains.wood}</span>
           <span class="tag hunger">nourriture +${review.gains.food}</span>
@@ -3095,7 +3129,7 @@ function renderEnfantPowers(player) {
   return `
     <div class="role-powers">
       <div class="item-row">
-        <span><span class="tag">Pouvoir</span> Copie illimitÃ©e${player.childCopyUses ? ` (${player.childCopyUses})` : ""}</span>
+        <span><span class="tag">Pouvoir</span> Copie illimitée${player.childCopyUses ? ` (${player.childCopyUses})` : ""}</span>
         <select id="child-discard-${player.id}" ${disabled ? "disabled" : ""}>
           ${ownItems.length ? ownItems.map(item => `<option value="${item.id}">Jeter ${ITEMS[item.type]}</option>`).join("") : `<option>Aucun objet</option>`}
         </select>
@@ -3307,7 +3341,7 @@ function renderVoteControls() {
 
 function voteStatusLabel(voter) {
   if (game.votes[voter.id] === "none") return "aucun choix";
-  if (game.votes[voter.id]) return voter.isBot ? "vote cache" : "vote secret reÃ§u";
+  if (game.votes[voter.id]) return voter.isBot ? "vote cache" : "vote secret reçu";
   if (!voteTargetsFor(voter).length) return "aucun choix";
   if (!voter.isBot && game.playMode === "separateDevices" && humanPlayers().length >= 2 && !canControlPlayer(voter)) return "en attente";
   return voter.isBot ? "vote cache" : "vote secret attendu";
