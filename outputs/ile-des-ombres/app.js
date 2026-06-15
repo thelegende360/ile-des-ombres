@@ -3414,3 +3414,16 @@ function renderEndModal() {
 }
 
 render();
+
+const originalAssassinStealItem = assassinStealItem;
+assassinStealItem = function(playerId) {
+      const assassin = game.players.find(player => player.id === playerId);
+      const targetId = document.querySelector("#assassin-steal-" + playerId)?.value;
+      const target = game.players.find(player => player.id === targetId);
+      if (target && !availableItems(target).length) {
+              if (assassin) assassin.privateNote = target.name + " n'a aucun objet disponible. Ton pouvoir de vol reste disponible.";
+              render();
+              return;
+      }
+      originalAssassinStealItem(playerId);
+};
