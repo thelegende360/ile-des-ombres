@@ -45,7 +45,7 @@ const ROLE_SUMMARY = {
   },
   Chaman: {
     objects: "Boule de cristal +10%, Amulette +10%, Double vote -20%.",
-    powers: "Reanime un joueur mort une fois. Cree et donne une amulette a un joueur."
+    powers: "Reanime un joueur mort une fois. Cree une amulette pour lui-meme ou pour son allie reanime."
   },
   Survivant: {
     objects: "Gilet +10%, Kit de soin +10%, Boule de cristal -10%, Double vote -10%.",
@@ -621,12 +621,17 @@ function useBotChamanPowers(chaman) {
 
 function botProtectTarget(chaman) {
   chaman.chamanAmuletTargets ||= [];
-  const candidates = living().filter(target => !chaman.chamanAmuletTargets.includes(target.id));
+  const candidates = chamanAmuletTargets(chaman).filter(target => !chaman.chamanAmuletTargets.includes(target.id));
   if (!candidates.length) return null;
   const stressed = candidates
     .filter(target => botSurvivalPressure(target) >= 4 || target.id === chaman.id || likelyShortageSoon())
     .sort((a, b) => botSurvivalPressure(b) - botSurvivalPressure(a));
   return stressed[0] || null;
+}
+
+function chamanAmuletTargets(chaman) {
+  if (!chaman) return [];
+  return living().filter(target => target.id === chaman.id || target.revivedById === chaman.id);
 }
 
 function useBotSurvivantPower(player) {
@@ -1179,8 +1184,8 @@ function pendingItemActivationAnnouncements() {
   }
   if (counts.crystal) {
     announcements.push({
-      text: `${counts.crystal} boule${counts.crystal > 1 ? "s" : ""} de cristal ${counts.crystal > 1 ? "sont utilisées" : "est utilisée"} ce tour-ci.`,
-      narration: `${counts.crystal} boule${counts.crystal > 1 ? "s" : ""} de cristal ${counts.crystal > 1 ? "sont utilisées" : "est utilisée"} ce tour-ci.`
+      text: `${counts.crystal} boule de cristal utilise.`,
+      narration: `${counts.crystal} boule de cristal utilise.`
     });
   }
   return announcements;
@@ -1958,7 +1963,8 @@ function consumePassiveVest(player) {
 
 function deprivePlayer(player) {
   if (!player || !player.alive || player.leftBehind) return;
-  announceImportant(`${player.name} ne reçoit pas de ration.`, `${player.name} ne reçoit pas de ration.`);
+  const missing = currentShortageMissingText();
+  announceImportant(`${player.name} ne recoit pas de ration. ${missing}`, `${player.name} ne recoit pas de ration. ${missing}`);
   if (!game.shortage) {
     game.shortage = { deprivedIds: [], foodNeed: 0, waterNeed: 0, foodMissing: 0, waterMissing: 0 };
   }
@@ -1977,6 +1983,14 @@ function deprivePlayer(player) {
     changeResource(game, "morale", -18);
     announceDeath(player, `${player.name} est mort après avoir atteint 2 fatigue.`, `${player.name} est mort après avoir atteint deux points de fatigue.`);
   }
+}
+
+function currentShortageMissingText() {
+  const shortage = game?.shortage;
+  if (!shortage) return "Rations manquantes: aucune.";
+  const food = Math.max(0, shortage.foodMissing || 0);
+  const water = Math.max(0, shortage.waterMissing || 0);
+  return `Rations manquantes: ${food} nourriture et ${water} eau.`;
 }
 
 function assassinStealItem(playerId) {
@@ -2131,6 +2145,7 @@ function chamanCreateAmulet(playerId) {
   if (!canControlPlayer(chaman)) return;
   if (!chaman || !target || chaman.role !== "Chaman" || game.phase !== "actions") return;
   if (chaman.chamanAmuletUses >= 1 || chaman.chamanAmuletTargets.includes(target.id) || !target.alive || target.leftBehind) return;
+  if (!chamanAmuletTargets(chaman).some(candidate => candidate.id === target.id)) return;
   chaman.chamanAmuletUses += 1;
   chaman.chamanAmuletTargets.push(target.id);
   target.items.push(createItem("amulet", game.day));
@@ -3179,7 +3194,7 @@ function renderAssassinPowers(player) {
 
 function renderChamanPowers(player) {
   const deadTargets = game.players.filter(target => !target.alive && !target.leftBehind);
-  const amuletTargets = living().filter(target => !player.chamanAmuletTargets.includes(target.id));
+  const amuletTargets = chamanAmuletTargets(player).filter(target => !player.chamanAmuletTargets.includes(target.id));
   const reviveLocked = player.chamanReviveUsed || Boolean(player.pendingChamanRevive) || !deadTargets.length;
   return `
     <div class="role-powers">
