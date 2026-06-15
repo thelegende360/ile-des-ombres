@@ -1,4 +1,4 @@
-const CACHE_VERSION = "ile-des-ombres-v2";
+const CACHE_VERSION = "ile-des-ombres-v3";
 const APP_SHELL = [
   "/",
   "/index.html",
