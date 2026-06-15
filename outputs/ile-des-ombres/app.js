@@ -1,5 +1,5 @@
 const ACTIONS = [
-    { id: "wood", label: "Couper du bois" },
+  { id: "wood", label: "Couper du bois" },
   { id: "fish", label: "Pecher" },
   { id: "water", label: "Chercher de l'eau" },
   { id: "explore", label: "Explorer" },
@@ -470,7 +470,7 @@ function assignBotActions() {
 }
 
 function availableItems(player, type = null) {
-  return player.items.filter(item => item.availableDay <= game.day && (!type || item.type === type));
+  return (player?.items || []).filter(item => item.availableDay <= game.day && (!type || item.type === type));
 }
 
 function consumeBotItem(player, type) {
@@ -487,7 +487,6 @@ function useBotActionItems() {
       const target = botTargetForItem(player);
       if (target && consumeBotItem(player, "crystal")) {
         rememberCrystalSpy(player, target);
-        trackItemActivation("crystal");
       }
     }
     if (shouldBotUsePistol(player)) {
@@ -512,7 +511,6 @@ function useBotMedkit(player) {
   if (!item) return false;
   game.pendingBotMedkits = game.pendingBotMedkits || [];
   game.pendingBotMedkits.push({ playerId: player.id });
-  addPendingPublicAnnouncement("Un kit de soin est utilisé.");
   return true;
 }
 
@@ -614,7 +612,6 @@ function useBotChamanPowers(chaman) {
       chaman.chamanAmuletTargets.push(target.id);
       target.items.push(createItem("amulet", game.day));
       target.privateNote = `${chaman.name} t'a donne une amulette de protection.`;
-      addPendingPublicAnnouncement("Une amulette de protection est creee par un chaman.", "Une amulette de protection est offerte par un chaman.");
     }
   }
 }
@@ -660,7 +657,6 @@ function useBotChildPower(child) {
     child.items.push(createItem(mentorItem.type, game.day));
     child.childCopyUses += 1;
     child.privateNote = `Tu copies ${ITEMS[mentorItem.type]} de ton mentor.`;
-    addPendingPublicAnnouncement("Un enfant copie un objet de son mentor.");
   }
 }
 
@@ -696,12 +692,10 @@ function useBotDogPowers(dog) {
   const target = living().filter(candidate => candidate.id !== dog.id && availableItems(candidate).length)
     .sort((a, b) => availableItems(b).length - availableItems(a).length || botTargetValue(b) - botTargetValue(a))[0];
   if (joy >= 1 && target && game.day >= 4 && Math.random() < 0.38) {
-    const item = lowestValueItem(availableItems(target)) || randomEntry(availableItems(target));
-    target.items = target.items.filter(candidate => candidate.id !== item.id);
     dog.joy -= 1;
-    dog.privateNote = `Pouvoir du chien: ${ITEMS[item.type]} detruit chez ${target.name}.`;
-    target.privateNote = `${ITEMS[item.type]} a ete detruit.`;
-    addPendingPublicAnnouncement("Un objet est detruit.");
+    game.pendingDogDestroys = game.pendingDogDestroys || [];
+    game.pendingDogDestroys.push({ dogId: dog.id, targetId: target.id });
+    dog.privateNote = `Pouvoir du chien prepare contre ${target.name}. Joie restante: ${dog.joy}.`;
   }
 }
 
@@ -915,6 +909,7 @@ function newGame(config = {}) {
     votes: {},
     pendingPistols: [],
     pendingAssassinSteals: [],
+    pendingDogDestroys: [],
     pendingBotMedkits: [],
     itemActivationsThisTurn: {},
     pendingPublicAnnouncements: [],
@@ -1182,12 +1177,6 @@ function pendingItemActivationAnnouncements() {
       narration: `${counts.pistol} pistolet${counts.pistol > 1 ? "s" : ""} ${counts.pistol > 1 ? "sont préparés" : "est préparé"} ce tour-ci.`
     });
   }
-  if (counts.crystal) {
-    announcements.push({
-      text: `${counts.crystal} boule de cristal utilise.`,
-      narration: `${counts.crystal} boule de cristal utilise.`
-    });
-  }
   return announcements;
 }
 
@@ -1223,14 +1212,7 @@ function queueNarration(text) {
 }
 
 function enqueueSpeech(text) {
-  const now = Date.now();
-  speechQueue = speechQueue
-    .filter(entry => now - narrationQueuedAt(entry) <= MAX_SPEECH_DELAY_MS)
-    .slice(-(MAX_SPEECH_QUEUE - 1));
-  speechQueue.push({ text, queuedAt: now });
-  if (speechBusy && speechQueue.length >= MAX_SPEECH_QUEUE && speechCurrentStartedAt && now - speechCurrentStartedAt > MAX_SPEECH_DELAY_MS) {
-    globalThis.speechSynthesis?.cancel?.();
-  }
+  speechQueue = [{ text, queuedAt: Date.now() }];
 }
 
 function narrationText(entry) {
@@ -1254,7 +1236,7 @@ function isDuplicateNarration(text, windowMs = 4500) {
   if (!key) return true;
   const now = Date.now();
   const last = recentNarrations.get(key) || 0;
-  return now - last < windowMs || speechQueue.some(entry => narrationKey(narrationText(entry)) === key);
+  return now - last < windowMs;
 }
 
 function markNarrationHeard(text) {
@@ -1294,6 +1276,8 @@ function spokenFrench(text) {
     .replace(/\bTempete\b/g, "\u0054emp\u00eate")
     .replace(/\bPenurie\b/g, "\u0050\u00e9nurie")
     .replace(/\bpenurie\b/g, "\u0070\u00e9nurie")
+    .replace(/\brecoit\b/g, "\u0072e\u00e7oit")
+    .replace(/\brecoivent\b/g, "\u0072e\u00e7oivent")
     .replace(/\butilisee\b/g, "\u0075tilis\u00e9e")
     .replace(/\butilise\b/g, "\u0075tilis\u00e9")
     .replace(/\butilises\b/g, "\u0075tilis\u00e9s")
@@ -1367,7 +1351,6 @@ function playNextNarration() {
   if (!synth || !Utterance || speechBusy || !speechQueue.length) return;
 
   speechBusy = true;
-  speechQueue = speechQueue.filter(entry => Date.now() - narrationQueuedAt(entry) <= MAX_SPEECH_DELAY_MS);
   if (!speechQueue.length) {
     speechBusy = false;
     return;
@@ -1439,7 +1422,6 @@ function lockActionsIfReady() {
   if (game.phase !== "actions" || !living().length) return false;
   if (!living().every(candidate => candidate.action)) return false;
   useBotMedkitsAtActionLock();
-  resolvePendingAssassinSteals();
   resolvePendingChamanRevives();
   game.phase = "resolve-ready";
   flushPendingPublicAnnouncements();
@@ -1452,6 +1434,8 @@ function resolveDay() {
   const summary = [];
   resolvePendingBotMedkits(summary);
   resolvePendingPistols(summary);
+  resolvePendingAssassinSteals(summary);
+  resolvePendingDogDestroys(summary);
   const resourceGains = { wood: 0, food: 0, water: 0 };
   const actionStats = {
     camp: 0,
@@ -1523,14 +1507,13 @@ function resolveDay() {
 function resolvePendingBotMedkits(summary) {
   const pending = game.pendingBotMedkits || [];
   if (!pending.length) return;
-  let used = 0;
   pending.forEach(entry => {
     const player = game.players.find(candidate => candidate.id === entry.playerId);
     if (!player?.alive || player.leftBehind || player.fatigue <= 0) return;
     addFatigue(player, -1);
-    used += 1;
   });
   game.pendingBotMedkits = [];
+  const used = 0;
   if (used) {
     summary.push(`${used} kit${used > 1 ? "s" : ""} de soin ${used > 1 ? "sont utilisés" : "est utilisé"}.`);
   }
@@ -1890,7 +1873,6 @@ function useItem(playerId, itemId) {
   } else if (item.type === "medkit") {
     addFatigue(player, -1);
     player.privateNote = "Kit de soin utilisé: -1 fatigue.";
-    addPendingPublicAnnouncement("Un kit de soin est utilisé.");
   }
   render();
 }
@@ -1915,7 +1897,6 @@ function useTargetItem(playerId, itemId) {
   } else if (item.type === "crystal") {
     rememberCrystalSpy(player, target);
     player.privateNote = `Boule de cristal: ${target.name}, role ${target.role}${target.cursed ? ", maudit" : ""}, action ${target.lastAction || "Aucune"}, vote ${target.lastVote || "Aucun vote"}, objets ${itemNames(target)}.`;
-    trackItemActivation("crystal");
   }
   render();
 }
@@ -1964,7 +1945,7 @@ function consumePassiveVest(player) {
 function deprivePlayer(player) {
   if (!player || !player.alive || player.leftBehind) return;
   const missing = currentShortageMissingText();
-  announceImportant(`${player.name} ne recoit pas de ration. ${missing}`, `${player.name} ne recoit pas de ration. ${missing}`);
+  announceImportant(`${player.name} ne recoit pas de ration. ${missing}`, `${player.name} ne reçoit pas de ration. ${missing}`);
   if (!game.shortage) {
     game.shortage = { deprivedIds: [], foodNeed: 0, waterNeed: 0, foodMissing: 0, waterMissing: 0 };
   }
@@ -1990,6 +1971,8 @@ function currentShortageMissingText() {
   if (!shortage) return "Rations manquantes: aucune.";
   const food = Math.max(0, shortage.foodMissing || 0);
   const water = Math.max(0, shortage.waterMissing || 0);
+  if (food && !water) return `Rations manquantes: ${food} nourriture.`;
+  if (water && !food) return `Rations manquantes: ${water} eau.`;
   return `Rations manquantes: ${food} nourriture et ${water} eau.`;
 }
 
@@ -2000,8 +1983,8 @@ function assassinStealItem(playerId) {
   if (!canControlPlayer(assassin)) return;
   if (!assassin || !target || assassin.role !== "Assassin" || assassin.assassinStealUsed || assassin.pendingAssassinSteal || game.phase !== "actions") return;
   if (!target.alive || target.leftBehind || target.id === assassin.id) return;
-  if (!target.items.length) {
-    assassin.privateNote = `${target.name} n'a aucun objet. Ton pouvoir de vol reste disponible.`;
+  if (!availableItems(target).length) {
+    assassin.privateNote = `${target.name} n'a aucun objet disponible. Ton pouvoir de vol reste disponible.`;
     render();
     return;
   }
@@ -2012,26 +1995,29 @@ function assassinStealItem(playerId) {
   render();
 }
 
-function resolvePendingAssassinSteals() {
+function resolvePendingAssassinSteals(summary = null) {
   const pending = game.pendingAssassinSteals || [];
   if (!pending.length) return;
   pending.forEach(steal => {
     const assassin = game.players.find(player => player.id === steal.assassinId);
     const target = game.players.find(player => player.id === steal.targetId);
     if (assassin) assassin.pendingAssassinSteal = null;
-    if (!assassin || !target || !assassin.alive || !target.alive || target.leftBehind || !target.items.length) {
+    const stealableItems = target ? availableItems(target) : [];
+    if (!assassin || !target || !assassin.alive || !target.alive || target.leftBehind || !stealableItems.length) {
       if (assassin) {
         assassin.assassinStealUsed = false;
         assassin.privateNote = "Le vol echoue: la cible n'avait plus d'objet disponible. Ton pouvoir revient.";
       }
       return;
     }
-    const stolenIndex = Math.floor(Math.random() * target.items.length);
-    const [item] = target.items.splice(stolenIndex, 1);
+    const item = stealableItems[Math.floor(Math.random() * stealableItems.length)];
+    target.items = target.items.filter(candidate => candidate.id !== item.id);
     assassin.items.push(item);
     assassin.privateNote = `Objet vole a ${target.name}: ${ITEMS[item.type]}.`;
     target.privateNote = `${ITEMS[item.type]} a disparu de ta carte.`;
-    addPendingPublicAnnouncement(`${target.name} s'est fait voler un objet.`);
+    const text = `${target.name} s'est fait voler un objet.`;
+    if (summary) summary.push(text);
+    else announceImportant(text);
   });
   game.pendingAssassinSteals = [];
 }
@@ -2150,7 +2136,6 @@ function chamanCreateAmulet(playerId) {
   chaman.chamanAmuletTargets.push(target.id);
   target.items.push(createItem("amulet", game.day));
   target.privateNote = `${chaman.name} t'a donne une amulette de protection.`;
-  addPendingPublicAnnouncement("Une amulette de protection est creee par un chaman.", "Une amulette de protection est offerte par un chaman.");
   render();
 }
 
@@ -2173,7 +2158,6 @@ function childCopyMentorItem(playerId) {
   child.items.push(createItem(source.type, game.day));
   child.childCopyUses += 1;
   child.privateNote = `Tu as jete ${ITEMS[discard.type]} pour copier ${ITEMS[source.type]} de ${mentor.name}.`;
-  addPendingPublicAnnouncement("Un enfant copie un objet de son mentor.");
   render();
 }
 
@@ -2195,14 +2179,34 @@ function dogDestroyItem(playerId) {
   const targetId = document.querySelector(`#dog-destroy-${playerId}`)?.value;
   const target = game.players.find(player => player.id === targetId);
   if (!canControlPlayer(dog)) return;
-  if (!dog || dog.role !== "Chien" || !dog.alive || game.phase !== "actions" || (dog.joy || 0) < 1 || !target?.items?.length) return;
-  const item = randomEntry(target.items);
-  target.items = target.items.filter(candidate => candidate.id !== item.id);
+  if (!dog || dog.role !== "Chien" || !dog.alive || game.phase !== "actions" || (dog.joy || 0) < 1 || !availableItems(target || {}).length) return;
   dog.joy -= 1;
-  dog.privateNote = `Pouvoir du chien: ${ITEMS[item.type]} detruit chez ${target.name}. Joie restante: ${dog.joy}.`;
-  target.privateNote = `${ITEMS[item.type]} a ete detruit.`;
-  addPendingPublicAnnouncement("Un objet est detruit.");
+  game.pendingDogDestroys = game.pendingDogDestroys || [];
+  game.pendingDogDestroys.push({ dogId: dog.id, targetId: target.id });
+  dog.privateNote = `Destruction preparee contre ${target.name}. Elle sera revelee apres les actions. Joie restante: ${dog.joy}.`;
   render();
+}
+
+function resolvePendingDogDestroys(summary = null) {
+  const pending = game.pendingDogDestroys || [];
+  if (!pending.length) return;
+  pending.forEach(entry => {
+    const dog = game.players.find(player => player.id === entry.dogId);
+    const target = game.players.find(player => player.id === entry.targetId);
+    const destroyableItems = target ? availableItems(target) : [];
+    if (!dog || !target || !dog.alive || !target.alive || target.leftBehind || !destroyableItems.length) {
+      if (dog) dog.privateNote = "Destruction annulee: aucun objet disponible.";
+      return;
+    }
+    const item = lowestValueItem(destroyableItems) || randomEntry(destroyableItems);
+    target.items = target.items.filter(candidate => candidate.id !== item.id);
+    dog.privateNote = `Pouvoir du chien: ${ITEMS[item.type]} detruit chez ${target.name}.`;
+    target.privateNote = `${ITEMS[item.type]} a ete detruit.`;
+    const text = "Un objet est detruit.";
+    if (summary) summary.push(text);
+    else announceImportant(text);
+  });
+  game.pendingDogDestroys = [];
 }
 
 function dogActivateAmulet(playerId) {
@@ -2897,6 +2901,7 @@ function renderBottom() {
         </div>
         <div class="drawer-tabs">
           ${renderDrawerTab("items", "Objets")}
+          ${renderDrawerTab("events", "Evenements")}
           ${renderDrawerTab("log", "Journal")}
           ${renderDrawerTab("vote", `Vote ${voteIsOpen() ? "ouvert" : "ferme"}`)}
         </div>
@@ -2921,7 +2926,7 @@ function renderDrawerTab(type, label) {
 }
 
 function renderBottomDrawer(type) {
-  const title = type === "items" ? "Recapitulatif des objets" : type === "vote" ? "Vote" : "Journal";
+  const title = type === "items" ? "Recapitulatif des objets" : type === "events" ? "Evenements" : type === "vote" ? "Vote" : "Journal";
   return `
     <div class="panel drawer-panel drawer-${type}">
       <div class="title-row">
@@ -2930,7 +2935,7 @@ function renderBottomDrawer(type) {
         ${type !== "log" && !voteIsOpen() ? `<button onclick="toggleBottomDrawer('${type}')">Fermer</button>` : ""}
       </div>
       <div class="drawer-body">
-        ${type === "items" ? renderItemReference() : type === "vote" ? renderVoteControls() : renderLogDrawer()}
+        ${type === "items" ? renderItemReference() : type === "events" ? renderEventReference() : type === "vote" ? renderVoteControls() : renderLogDrawer()}
       </div>
     </div>
   `;
@@ -3032,6 +3037,55 @@ function renderItemReference() {
 
 function selectInfoItem(type) {
   game.selectedInfoItem = type;
+  render();
+}
+
+function eventReferenceEntries() {
+  return [
+    ...EVENTS.map((event, index) => ({
+      id: `daily-${index}`,
+      title: event.title,
+      text: event.text
+    })),
+    {
+      id: "day5-storm",
+      title: "Tempete",
+      text: "Debut du jour 5: le camp perd tout son bois et 1 radeau."
+    },
+    {
+      id: "day5-raid",
+      title: "Pillage",
+      text: "Debut du jour 5: eau -3 et nourriture -3, sans descendre sous 0."
+    },
+    {
+      id: "day5-bear",
+      title: "Ours",
+      text: "Debut du jour 5: chaque joueur perd 1 objet. Sans objet, il prend +1 fatigue."
+    },
+    {
+      id: "day5-spirit",
+      title: "Esprit",
+      text: "Debut du jour 5: un joueur est maudit. Quand il suit sa mission, un joueur aleatoire prend +1 fatigue. La boule de cristal peut le reveler."
+    }
+  ];
+}
+
+function renderEventReference() {
+  const entries = eventReferenceEntries();
+  const selectedId = game.selectedInfoEvent || entries[0]?.id;
+  const selected = entries.find(entry => entry.id === selectedId) || entries[0];
+  return `
+    <div class="item-reference event-reference">
+      ${entries.map(entry => `
+        <button class="${selected?.id === entry.id ? "selected" : ""}" onclick="selectInfoEvent('${entry.id}')">${entry.title}</button>
+      `).join("")}
+    </div>
+    <p class="role">${selected ? `${selected.title}: ${selected.text}` : ""}</p>
+  `;
+}
+
+function selectInfoEvent(id) {
+  game.selectedInfoEvent = id;
   render();
 }
 
@@ -3170,7 +3224,7 @@ function renderSurvivantPowers(player) {
 }
 
 function renderAssassinPowers(player) {
-  const stealTargets = living().filter(target => target.id !== player.id && !target.leftBehind);
+  const stealTargets = living().filter(target => target.id !== player.id && !target.leftBehind && availableItems(target).length);
   const killTargets = living().filter(target => target.id !== player.id && !target.leftBehind && target.fatigue === 1);
   return `
     <div class="role-powers">
@@ -3274,8 +3328,57 @@ function renderPlayerItems(player) {
       <div class="item-title">Objets secrets</div>
       ${player.voteShield ? `<span class="tag good">amulette active</span>` : ""}
       ${player.doubleVote ? `<span class="tag good">double vote actif</span>` : ""}
-      ${player.items.map(item => renderItemControl(player, item)).join("")}
+      ${groupPlayerItems(player).map(group => renderItemGroupControl(player, group)).join("")}
       ${powers}
+    </div>
+  `;
+}
+
+function groupPlayerItems(player) {
+  const groups = new Map();
+  (player.items || []).forEach(item => {
+    const locked = item.availableDay > game.day;
+    const key = `${item.type}-${locked ? item.availableDay : "ready"}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        type: item.type,
+        availableDay: item.availableDay,
+        locked,
+        items: []
+      });
+    }
+    groups.get(key).items.push(item);
+  });
+  return [...groups.values()];
+}
+
+function itemGroupLabel(group) {
+  return `${ITEMS[group.type]}${group.items.length > 1 ? ` x${group.items.length}` : ""}`;
+}
+
+function renderItemGroupControl(player, group) {
+  const item = group.items[0];
+  if (group.locked) {
+    return `<div class="item-row"><span>${itemGroupLabel(group)}</span><span class="tag">jour ${group.availableDay}</span></div>`;
+  }
+  if (group.type === "vest") {
+    return `<div class="item-row"><span>${itemGroupLabel(group)}</span><span class="tag good">automatique</span></div>`;
+  }
+  if (group.type === "pistol" || group.type === "crystal") {
+    return `
+      <div class="item-row">
+        <span>${itemGroupLabel(group)}</span>
+        <select id="target-${item.id}">
+          ${living().filter(target => target.id !== player.id).map(target => `<option value="${target.id}">${target.name}</option>`).join("")}
+        </select>
+        <button onclick="useTargetItem('${player.id}', '${item.id}')">Utiliser</button>
+      </div>
+    `;
+  }
+  return `
+    <div class="item-row">
+      <span>${itemGroupLabel(group)}</span>
+      <button onclick="useItem('${player.id}', '${item.id}')">Utiliser</button>
     </div>
   `;
 }
@@ -3331,7 +3434,7 @@ function renderVoteControls() {
   const missingRafts = Math.max(0, living().length - game.camp.rafts);
   const leftBehind = game.players.filter(player => player.leftBehind);
   return `
-    ${isShortageVote ? `<p class="role">Penurie: il manque ${game.shortage.foodMissing} nourriture et ${game.shortage.waterMissing} eau. Vote obligatoire pour choisir qui ne mange/boit pas.</p>` : ""}
+    ${isShortageVote ? `<p class="role">${shortageVoteNarration(game.shortage.foodMissing, game.shortage.waterMissing)} Vote obligatoire pour choisir qui ne mange/boit pas.</p>` : ""}
     ${isEscapeVote ? `<p class="role">Evasion: ${game.camp.rafts} radeau${game.camp.rafts > 1 ? "x" : ""} pour ${living().length} survivants. Vote pour designer ${missingRafts} joueur${missingRafts > 1 ? "s" : ""} qui reste${missingRafts > 1 ? "nt" : ""} sur l'ile.</p>` : ""}
     ${isEscapeVote && leftBehind.length ? `
       <div class="left-behind-list">
@@ -3414,16 +3517,3 @@ function renderEndModal() {
 }
 
 render();
-
-const originalAssassinStealItem = assassinStealItem;
-assassinStealItem = function(playerId) {
-      const assassin = game.players.find(player => player.id === playerId);
-      const targetId = document.querySelector("#assassin-steal-" + playerId)?.value;
-      const target = game.players.find(player => player.id === targetId);
-      if (target && !availableItems(target).length) {
-              if (assassin) assassin.privateNote = target.name + " n'a aucun objet disponible. Ton pouvoir de vol reste disponible.";
-              render();
-              return;
-      }
-      originalAssassinStealItem(playerId);
-};
