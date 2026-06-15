@@ -1,6 +1,5 @@
-!AVAILABLEITEMS(TARGET).LENGTH!STEALABLEITEMS.LENGTHCONST STEALABLEITEMS = TARGET ? AVAILABLEITEMS(TARGET) : [];
-    IF (!ASSASSIN || !TARGET || !ASSASSIN.ALIVECONST ITEM = STEALABLEITEMS[MATH.FLOOR(MATH.RANDOM() * STEALABLEITEMS.LENGTH)];TARGET.ITEMS = TARGET.ITEMS.FILTER(CANDIDATE => CANDIDATE.ID !== ITEM.ID);CONST STEALTARGETS = LIVING().FILTER(TARGET => TARGET.ID !== PLAYER.ID && !TARGET.LEFTBEHIND && AVAILABLEITEMS(TARGET).LENGTH);const ACTIONS = [
-  { id: "wood", label: "Couper du bois" },
+const ACTIONS = [
+    { id: "wood", label: "Couper du bois" },
   { id: "fish", label: "Pecher" },
   { id: "water", label: "Chercher de l'eau" },
   { id: "explore", label: "Explorer" },
