@@ -395,7 +395,7 @@ function actionHint(actionId, player = null) {
     return `${player?.role === "Survivant" ? "2 a 4" : "1 a 3"}, reputation +2`;
   }
   if (actionId === "explore") {
-    if (player?.role === "Chien") return "Joie +1, reputation +2, -1 eau et -1 nourriture";
+    if (player?.role === "Chien") return "Joie +1, reputation -1 ou +2, -1 eau et -1 nourriture";
     return "Trouver un objet, reputation -1";
   }
   if (actionId === "sleep") return "-1 fatigue, faim 0, soif 0, reputation 0";
@@ -1288,8 +1288,12 @@ function spokenFrench(text) {
     .replace(/\bpenurie\b/g, "\u0070\u00e9nurie")
     .replace(/\brecoit\b/g, "\u0072e\u00e7oit")
     .replace(/\brecoivent\b/g, "\u0072e\u00e7oivent")
+    .replace(/\brecu\b/g, "\u0072e\u00e7u")
+    .replace(/\brecus\b/g, "\u0072e\u00e7us")
+    .replace(/\boeuvr\S*/giu, "\u0153uvr\u00e9")
     .replace(/\boeuvre\b/g, "\u0153uvre")
     .replace(/\boeuvr\u00e9\b/g, "\u0153uvr\u00e9")
+    .replace(/\boeuvra\b/g, "\u0153uvr\u00e9")
     .replace(/\boeuvrent\b/g, "\u0153uvrent")
     .replace(/\butilisee\b/g, "\u0075tilis\u00e9e")
     .replace(/\butilise\b/g, "\u0075tilis\u00e9")
@@ -1333,6 +1337,19 @@ function spokenFrench(text) {
 function cleanSpeechText(text) {
   return String(text || "")
     .normalize("NFKC")
+    .replace(/\u00c3\u00a9/g, "\u00e9")
+    .replace(/\u00c3\u00a8/g, "\u00e8")
+    .replace(/\u00c3\u00aa/g, "\u00ea")
+    .replace(/\u00c3\u00ab/g, "\u00eb")
+    .replace(/\u00c3\u00a0/g, "\u00e0")
+    .replace(/\u00c3\u00a2/g, "\u00e2")
+    .replace(/\u00c3\u00ae/g, "\u00ee")
+    .replace(/\u00c3\u00af/g, "\u00ef")
+    .replace(/\u00c3\u00b4/g, "\u00f4")
+    .replace(/\u00c3\u00bb/g, "\u00fb")
+    .replace(/\u00c3\u00b9/g, "\u00f9")
+    .replace(/\u00c3\u00a7/g, "\u00e7")
+    .replace(/\u00c2/g, "")
     .replace(/ÃƒÂ©/g, "\u00e9")
     .replace(/ÃƒÂ¨/g, "\u00e8")
     .replace(/ÃƒÂª/g, "\u00ea")
@@ -1502,7 +1519,7 @@ function resolveDay() {
         break;
       case "explore":
         resolveExplore(player, summary);
-        changeReputation(player, player.role === "Chien" ? 2 : -1);
+        changeReputation(player, player.role === "Chien" ? (Math.random() < 0.5 ? -1 : 2) : -1);
         actionStats.explore += 1;
         break;
       case "sleep":
@@ -2461,6 +2478,10 @@ function announceTopVoteResult(targetId, votes) {
   if (!targetId || !votes) return;
   const target = game.players.find(player => player.id === targetId);
   if (!target) return;
+  const cleanVoteText = `${target.name} a recu ${votes} vote${votes > 1 ? "s" : ""}.`;
+  addLog(cleanVoteText, "important");
+  queueNarration(cleanVoteText);
+  return;
   const text = `${target.name} a reÃ§u le plus de voix: ${votes} voix.`;
   addLog(text, "important");
   queueNarration(text);
