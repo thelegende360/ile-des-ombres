@@ -1282,10 +1282,15 @@ function playSharedNarrations() {
 function spokenFrench(text) {
   return cleanSpeechText(text)
     .replace(/\bTempete\b/g, "\u0054emp\u00eate")
+    .replace(/\bEvenement\b/g, "\u00c9v\u00e8nement")
+    .replace(/\bevenement\b/g, "\u00e9v\u00e8nement")
     .replace(/\bPenurie\b/g, "\u0050\u00e9nurie")
     .replace(/\bpenurie\b/g, "\u0070\u00e9nurie")
     .replace(/\brecoit\b/g, "\u0072e\u00e7oit")
     .replace(/\brecoivent\b/g, "\u0072e\u00e7oivent")
+    .replace(/\boeuvre\b/g, "\u0153uvre")
+    .replace(/\boeuvr\u00e9\b/g, "\u0153uvr\u00e9")
+    .replace(/\boeuvrent\b/g, "\u0153uvrent")
     .replace(/\butilisee\b/g, "\u0075tilis\u00e9e")
     .replace(/\butilise\b/g, "\u0075tilis\u00e9")
     .replace(/\butilises\b/g, "\u0075tilis\u00e9s")
@@ -1298,12 +1303,16 @@ function spokenFrench(text) {
     .replace(/\bcree\b/g, "\u0063r\u00e9\u00e9")
     .replace(/\bprotege\b/g, "\u0070rot\u00e9g\u00e9")
     .replace(/\bprotegent\b/g, "\u0070rot\u00e8gent")
+    .replace(/\bimmunise\b/g, "\u0069mmunis\u00e9")
+    .replace(/\bimmunises\b/g, "\u0069mmunis\u00e9s")
     .replace(/\bprive\b/g, "\u0070riv\u00e9")
     .replace(/\bprives\b/g, "\u0070riv\u00e9s")
     .replace(/\bdepensees\b/g, "\u0064\u00e9pens\u00e9es")
     .replace(/\bdepense\b/g, "\u0064\u00e9pense")
     .replace(/\bdepenser\b/g, "\u0064\u00e9penser")
     .replace(/\bdesign(?:e|er)\b/g, match => match.endsWith("er") ? "\u0064\u00e9signer" : "\u0064\u00e9sign\u00e9")
+    .replace(/\bcible\b/g, "\u0063ibl\u00e9")
+    .replace(/\bcibles\b/g, "\u0063ibl\u00e9s")
     .replace(/\bpret\b/g, "\u0070r\u00eat")
     .replace(/\bechappe\b/g, "\u00e9chappe")
     .replace(/\bechappent\b/g, "\u00e9chappent")
@@ -1324,6 +1333,19 @@ function spokenFrench(text) {
 function cleanSpeechText(text) {
   return String(text || "")
     .normalize("NFKC")
+    .replace(/ÃƒÂ©/g, "\u00e9")
+    .replace(/ÃƒÂ¨/g, "\u00e8")
+    .replace(/ÃƒÂª/g, "\u00ea")
+    .replace(/ÃƒÂ«/g, "\u00eb")
+    .replace(/Ãƒ /g, "\u00e0")
+    .replace(/ÃƒÂ¢/g, "\u00e2")
+    .replace(/ÃƒÂ®/g, "\u00ee")
+    .replace(/ÃƒÂ¯/g, "\u00ef")
+    .replace(/ÃƒÂ´/g, "\u00f4")
+    .replace(/ÃƒÂ»/g, "\u00fb")
+    .replace(/ÃƒÂ¹/g, "\u00f9")
+    .replace(/ÃƒÂ§/g, "\u00e7")
+    .replace(/Ã‚/g, "")
     .replace(/ÃƒÂ©/g, "\u00e9")
     .replace(/ÃƒÂ¨/g, "\u00e8")
     .replace(/ÃƒÂª/g, "\u00ea")
@@ -1812,12 +1834,23 @@ function playerListSentence(players) {
   return players.map(player => player.name).join(", ");
 }
 
+function immuneVoteText(players) {
+  const names = playerListSentence(players);
+  return `${players.length === 1 ? "Le joueur" : "Les joueurs"} ${names} ${players.length === 1 ? "est immunise" : "sont immunises"} par une amulette.`;
+}
+
 function announceFirstShortageVoteDetails() {
   const deprived = new Set(game.shortage?.deprivedIds || []);
   const shielded = living().filter(player => player.voteShield && !deprived.has(player.id));
   const doubleVoters = living().filter(player => player.doubleVote);
 
   if (shielded.length) {
+    const text = immuneVoteText(shielded);
+    addLog(text, "important");
+    queueNarration(text);
+  }
+
+  if (false && shielded.length) {
     const names = playerListSentence(shielded);
     const text = `${shielded.length === 1 ? "Le joueur" : "Les joueurs"} ${names} ${shielded.length === 1 ? "est protÃ©gÃ©" : "sont protÃ©gÃ©s"} par une amulette.`;
     addLog(text, "important");
@@ -3448,6 +3481,7 @@ function renderVoteControls() {
   const leftBehind = game.players.filter(player => player.leftBehind);
   return `
     ${isShortageVote ? `<p class="role">${shortageVoteNarration(game.shortage.foodMissing, game.shortage.waterMissing)} Vote obligatoire pour choisir qui ne mange/boit pas.</p>` : ""}
+    ${renderVoteImmuneNotice()}
     ${isEscapeVote ? `<p class="role">Evasion: ${game.camp.rafts} radeau${game.camp.rafts > 1 ? "x" : ""} pour ${living().length} survivants. Vote pour designer ${missingRafts} joueur${missingRafts > 1 ? "s" : ""} qui reste${missingRafts > 1 ? "nt" : ""} sur l'ile.</p>` : ""}
     ${isEscapeVote && leftBehind.length ? `
       <div class="left-behind-list">
@@ -3466,6 +3500,19 @@ function renderVoteControls() {
     <div class="controls">
       <button class="primary" onclick="resolveVote()" ${allVotesReady() ? "" : "disabled"}>Depouiller</button>
       ${isShortageVote || isEscapeVote ? "" : `<button onclick="skipVote()">Passer</button>`}
+    </div>
+  `;
+}
+
+function renderVoteImmuneNotice() {
+  if (game.phase !== "shortage-vote") return "";
+  const deprived = new Set(game.shortage?.deprivedIds || []);
+  const immunePlayers = living().filter(player => player.voteShield && !deprived.has(player.id));
+  if (!immunePlayers.length) return "";
+  return `
+    <div class="left-behind-list vote-immune-list">
+      <div class="item-title">Immunises par amulette</div>
+      ${immunePlayers.map(player => `<span class="tag good">${player.name}</span>`).join("")}
     </div>
   `;
 }
