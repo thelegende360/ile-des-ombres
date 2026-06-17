@@ -486,6 +486,11 @@ h3 {
   background: rgba(213, 184, 115, 0.18);
 }
 
+.tag.reputation {
+  color: #ffe99a;
+  background: rgba(213, 184, 115, 0.24);
+}
+
 .tag.mission-wood {
   color: #ffd8ad;
   background: rgba(136, 86, 45, 0.34);
@@ -696,6 +701,13 @@ h3 {
   border-color: rgba(120, 201, 140, 0.3);
   background:
     linear-gradient(180deg, rgba(120, 201, 140, 0.075), transparent 54%),
+    var(--panel);
+}
+
+.drawer-events {
+  border-color: rgba(213, 184, 115, 0.36);
+  background:
+    linear-gradient(180deg, rgba(213, 184, 115, 0.09), transparent 54%),
     var(--panel);
 }
 
